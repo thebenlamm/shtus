@@ -21,7 +21,8 @@ interface GameState {
   players: Player[];
   hostId: string | null;
   currentPrompt: string;
-  timer: number;
+  theme: string;
+  isGenerating: boolean;
   answers: Answer[];
   votes: Record<string, string>;
 }
@@ -40,6 +41,7 @@ export default function GamePage({
   const [answer, setAnswer] = useState("");
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [hasVoted, setHasVoted] = useState(false);
+  const [theme, setTheme] = useState("");
   const socketRef = useRef<PartySocket | null>(null);
 
   useEffect(() => {
@@ -79,7 +81,10 @@ export default function GamePage({
     socketRef.current?.send(JSON.stringify(data));
   };
 
-  const startGame = () => send({ type: "start" });
+  const startGame = () => send({ type: "start", theme: theme || "random funny questions" });
+  const endWriting = () => send({ type: "end-writing" });
+  const endVoting = () => send({ type: "end-voting" });
+  const nextRound = () => send({ type: "next-round" });
   const submitAnswer = () => {
     if (answer.trim()) {
       send({ type: "answer", answer: answer.trim() });
@@ -107,9 +112,8 @@ export default function GamePage({
     <main id="main" className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 p-4">
       {/* Screen reader announcements for game state changes */}
       <div aria-live="assertive" aria-atomic="true" className="sr-only">
-        {state.phase === "prompt" && `Round ${state.round}. ${state.currentPrompt}`}
-        {state.phase === "writing" && "Write your answer now. You have 35 seconds."}
-        {state.phase === "voting" && "Vote for your favorite answer. You have 20 seconds."}
+        {state.phase === "writing" && `Round ${state.round}. ${state.currentPrompt}. Write your answer now.`}
+        {state.phase === "voting" && "Vote for your favorite answer."}
         {state.phase === "reveal" && "Results are in."}
         {state.phase === "final" && `Game over. ${sortedPlayers[0]?.name} wins!`}
       </div>
@@ -126,61 +130,66 @@ export default function GamePage({
           )}
         </div>
 
-        {/* Timer */}
-        {state.timer > 0 && (
-          <div className="mb-4">
-            <div
-              className="bg-white/90 backdrop-blur rounded-full h-4 overflow-hidden"
-              role="progressbar"
-              aria-valuenow={state.timer}
-              aria-valuemin={0}
-              aria-valuemax={state.phase === "writing" ? 35 : 20}
-              aria-label={`${state.timer} seconds remaining`}
-            >
-              <div
-                className="h-full bg-gradient-to-r from-purple-600 to-pink-500 transition-all duration-1000"
-                style={{
-                  width: `${(state.timer / (state.phase === "writing" ? 35 : 20)) * 100}%`,
-                }}
-              />
-            </div>
-            <div
-              className="text-center text-white font-bold mt-1"
-              aria-hidden="true"
-            >
-              {state.timer}s
-            </div>
-          </div>
-        )}
-
         {/* LOBBY */}
         {state.phase === "lobby" && (
           <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
-            <h2 className="text-2xl font-bold text-center mb-4">Waiting for players...</h2>
-            <div className="space-y-2 mb-6">
-              {state.players.map((p) => (
-                <div
-                  key={p.id}
-                  className={`p-3 rounded-xl ${p.id === myId ? "bg-purple-100 border-2 border-purple-500" : "bg-gray-100"}`}
-                >
-                  {p.name} {p.id === state.hostId && "(Host)"}
+            <h2 className="text-2xl font-bold text-center mb-4">
+              {state.isGenerating ? "Generating prompts..." : "Waiting for players..."}
+            </h2>
+
+            {state.isGenerating ? (
+              <div className="text-center py-8">
+                <div className="text-4xl mb-4 animate-pulse">🎲</div>
+                <p className="text-gray-600">AI is cooking up questions about:</p>
+                <p className="text-purple-600 font-bold text-lg mt-2">{state.theme}</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-2 mb-6">
+                  {state.players.map((p) => (
+                    <div
+                      key={p.id}
+                      className={`p-3 rounded-xl ${p.id === myId ? "bg-purple-100 border-2 border-purple-500" : "bg-gray-100"}`}
+                    >
+                      {p.name} {p.id === state.hostId && "(Host)"}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <p className="text-center text-gray-500 mb-4">
-              {state.players.length < 2
-                ? `Need at least 2 players (${state.players.length}/8)`
-                : `${state.players.length} players ready!`}
-            </p>
-            {isHost && state.players.length >= 2 && (
-              <button
-                onClick={startGame}
-                className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white text-xl font-bold rounded-xl hover:scale-105 transition-transform"
-              >
-                START GAME
-              </button>
+
+                {isHost && (
+                  <div className="mb-4">
+                    <label htmlFor="theme-input" className="block text-sm font-medium text-gray-700 mb-2">
+                      Game Theme (AI will generate questions)
+                    </label>
+                    <input
+                      id="theme-input"
+                      type="text"
+                      placeholder="e.g., The naked truth, Office nightmares, Dating disasters"
+                      value={theme}
+                      onChange={(e) => setTheme(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:outline-none"
+                      maxLength={100}
+                    />
+                  </div>
+                )}
+
+                <p className="text-center text-gray-500 mb-4">
+                  {state.players.length < 2
+                    ? `Need at least 2 players (${state.players.length}/8)`
+                    : `${state.players.length} players ready!`}
+                </p>
+
+                {isHost && state.players.length >= 2 && (
+                  <button
+                    onClick={startGame}
+                    className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white text-xl font-bold rounded-xl hover:scale-105 transition-transform"
+                  >
+                    START GAME
+                  </button>
+                )}
+                {!isHost && <p className="text-center text-gray-500">Waiting for host to start...</p>}
+              </>
             )}
-            {!isHost && <p className="text-center text-gray-500">Waiting for host to start...</p>}
           </div>
         )}
 
@@ -225,6 +234,14 @@ export default function GamePage({
                 <p className="text-gray-500">Answer submitted. Waiting for others...</p>
               </div>
             )}
+            {isHost && (
+              <button
+                onClick={endWriting}
+                className="w-full mt-4 py-3 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-700 transition-colors"
+              >
+                END WRITING → VOTE
+              </button>
+            )}
           </div>
         )}
 
@@ -254,6 +271,14 @@ export default function GamePage({
                 <div className="text-6xl mb-4" role="img" aria-label="Checkmark">✓</div>
                 <p className="text-gray-500">Vote submitted. Waiting for others...</p>
               </div>
+            )}
+            {isHost && (
+              <button
+                onClick={endVoting}
+                className="w-full mt-4 py-3 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-700 transition-colors"
+              >
+                END VOTING → RESULTS
+              </button>
             )}
           </div>
         )}
@@ -286,6 +311,14 @@ export default function GamePage({
                   );
                 })}
             </div>
+            {isHost && (
+              <button
+                onClick={nextRound}
+                className="w-full mt-4 py-3 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-xl hover:scale-105 transition-transform"
+              >
+                NEXT ROUND →
+              </button>
+            )}
           </div>
         )}
 

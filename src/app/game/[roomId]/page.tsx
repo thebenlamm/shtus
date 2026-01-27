@@ -21,6 +21,7 @@ interface Answer {
 interface GameState {
   phase: string;
   round: number;
+  roundLimit: number | null;
   players: Player[];
   hostId: string | null;
   currentPrompt: string;
@@ -47,6 +48,7 @@ export default function GamePage({
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [hasVoted, setHasVoted] = useState(false);
   const [theme, setTheme] = useState("");
+  const [roundLimit, setRoundLimit] = useState<number | null>(null); // Default to endless
   const [copied, setCopied] = useState(false);
   const socketRef = useRef<PartySocket | null>(null);
 
@@ -96,7 +98,7 @@ export default function GamePage({
     socketRef.current?.send(JSON.stringify(data));
   };
 
-  const startGame = () => send({ type: "start", theme: theme || "random funny questions" });
+  const startGame = () => send({ type: "start", theme: theme || "random funny questions", roundLimit });
   const endWriting = () => send({ type: "end-writing" });
   const endVoting = () => send({ type: "end-voting" });
   const nextRound = () => send({ type: "next-round" });
@@ -173,7 +175,7 @@ export default function GamePage({
           </div>
           {state.round > 0 && (
             <div className="bg-black/50 backdrop-blur px-4 py-2 rounded-full text-white font-bold">
-              Round {state.round}/5
+              Round {state.round}{state.roundLimit ? `/${state.roundLimit}` : ''}
             </div>
           )}
         </div>
@@ -213,20 +215,52 @@ export default function GamePage({
                 </ul>
 
                 {isHost && (
-                  <div className="mb-4">
-                    <label htmlFor="theme-input" className="block text-sm font-medium text-gray-700 mb-2">
-                      Game Theme (AI will generate questions)
-                    </label>
-                    <input
-                      id="theme-input"
-                      type="text"
-                      placeholder="e.g., The naked truth, Office nightmares, Dating disasters"
-                      value={theme}
-                      onChange={(e) => setTheme(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-500 focus:border-purple-500 focus:outline-none"
-                      maxLength={100}
-                    />
-                  </div>
+                  <>
+                    <div className="mb-4">
+                      <label htmlFor="theme-input" className="block text-sm font-medium text-gray-700 mb-2">
+                        Game Theme (AI will generate questions)
+                      </label>
+                      <input
+                        id="theme-input"
+                        type="text"
+                        placeholder="e.g., The naked truth, Office nightmares, Dating disasters"
+                        value={theme}
+                        onChange={(e) => setTheme(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-500 focus:border-purple-500 focus:outline-none"
+                        maxLength={100}
+                      />
+                    </div>
+                    <div className="mb-4">
+                      <span className="block text-sm font-medium text-gray-700 mb-2">Rounds</span>
+                      <div className="flex gap-2" role="group" aria-label="Select number of rounds">
+                        {[3, 5, 10].map((num) => (
+                          <button
+                            key={num}
+                            onClick={() => setRoundLimit(num)}
+                            className={`px-4 py-2 rounded-full font-bold transition-colors ${
+                              roundLimit === num
+                                ? "bg-purple-600 text-white"
+                                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                            }`}
+                            aria-pressed={roundLimit === num}
+                          >
+                            {num}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setRoundLimit(null)}
+                          className={`px-4 py-2 rounded-full font-bold transition-colors ${
+                            roundLimit === null
+                              ? "bg-purple-600 text-white"
+                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                          }`}
+                          aria-pressed={roundLimit === null}
+                        >
+                          Endless
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 <p className="text-center text-gray-500 mb-4">

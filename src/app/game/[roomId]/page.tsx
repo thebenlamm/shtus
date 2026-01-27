@@ -42,6 +42,7 @@ export default function GamePage({
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [hasVoted, setHasVoted] = useState(false);
   const [theme, setTheme] = useState("");
+  const [copied, setCopied] = useState(false);
   const socketRef = useRef<PartySocket | null>(null);
 
   useEffect(() => {
@@ -107,7 +108,6 @@ export default function GamePage({
 
   const isHost = myId === state.hostId;
   const sortedPlayers = [...state.players].sort((a, b) => b.score - a.score);
-  const [copied, setCopied] = useState(false);
 
   const copyLink = () => {
     const url = `${window.location.origin}/join/${roomId}`;

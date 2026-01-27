@@ -172,7 +172,7 @@ export default function GamePage({
                       key={p.id}
                       className={`p-3 rounded-xl ${p.id === myId ? "bg-purple-100 border-2 border-purple-500" : "bg-gray-100"}`}
                     >
-                      {p.name} {p.id === state.hostId && "(Host)"}
+                      {p.id === state.hostId && "👑 "}{p.name}
                     </div>
                   ))}
                 </div>
@@ -270,7 +270,7 @@ export default function GamePage({
                         : "bg-gray-200 text-gray-500"
                     }`}
                   >
-                    {p.name} {state.submittedPlayerIds?.includes(p.id) && "✓"}
+                    {p.id === state.hostId && "👑 "}{p.name} {state.submittedPlayerIds?.includes(p.id) && "✓"}
                   </span>
                 ))}
               </div>
@@ -328,7 +328,7 @@ export default function GamePage({
                         : "bg-gray-200 text-gray-500"
                     }`}
                   >
-                    {p.name} {state.votedPlayerIds?.includes(p.id) && "✓"}
+                    {p.id === state.hostId && "👑 "}{p.name} {state.votedPlayerIds?.includes(p.id) && "✓"}
                   </span>
                 ))}
               </div>
@@ -396,7 +396,7 @@ export default function GamePage({
                   className={`p-3 rounded-xl flex justify-between ${i === 0 ? "bg-yellow-100 border-2 border-yellow-400" : "bg-gray-100"}`}
                 >
                   <span>
-                    {i === 0 && "Winner "} {p.name}
+                    {i === 0 && "🏆 "}{p.id === state.hostId && "👑 "}{p.name}
                   </span>
                   <span className="font-bold">{p.score} pts</span>
                 </div>
@@ -420,7 +420,7 @@ export default function GamePage({
             <div className="grid grid-cols-2 gap-2 text-sm text-white">
               {sortedPlayers.map((p) => (
                 <div key={p.id} className="flex justify-between">
-                  <span>{p.name}</span>
+                  <span>{p.id === state.hostId && "👑 "}{p.name}</span>
                   <span>{p.score}</span>
                 </div>
               ))}

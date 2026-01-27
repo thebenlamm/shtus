@@ -92,7 +92,8 @@ Generate 10 unique prompts using these player names. Return ONLY a JSON array of
 
     if (!response.ok) {
       console.error("xAI API error:", response.status);
-      return shuffleArray(HARDCODED_PROMPTS).slice(0, 10);
+      const hardcodedWithNames = replaceNamesInPrompts(HARDCODED_PROMPTS, playerNames);
+      return shuffleArray(hardcodedWithNames).slice(0, 10);
     }
 
     const data = await response.json();

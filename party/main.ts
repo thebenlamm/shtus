@@ -57,7 +57,7 @@ async function generatePrompts(theme: string, playerNames: string[], apiKey: str
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "grok-3-mini",
+        model: "grok-4-fast-non-reasoning",
         messages: [
           {
             role: "system",

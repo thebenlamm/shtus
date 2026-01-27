@@ -107,6 +107,14 @@ export default function GamePage({
 
   const isHost = myId === state.hostId;
   const sortedPlayers = [...state.players].sort((a, b) => b.score - a.score);
+  const [copied, setCopied] = useState(false);
+
+  const copyLink = () => {
+    const url = `${window.location.origin}/join/${roomId}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <main id="main" className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 p-4">
@@ -120,8 +128,17 @@ export default function GamePage({
       <div className="max-w-lg mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
-          <div className="bg-black/50 backdrop-blur px-4 py-2 rounded-full text-white font-bold">
-            Room: {roomId}
+          <div className="flex items-center gap-2">
+            <div className="bg-black/50 backdrop-blur px-4 py-2 rounded-full text-white font-bold">
+              Room: {roomId}
+            </div>
+            <button
+              onClick={copyLink}
+              className="bg-black/50 backdrop-blur px-3 py-2 rounded-full text-white font-bold hover:bg-black/70 transition-colors"
+              aria-label="Copy invite link"
+            >
+              {copied ? "Copied!" : "Copy Link"}
+            </button>
           </div>
           {state.round > 0 && (
             <div className="bg-black/50 backdrop-blur px-4 py-2 rounded-full text-white font-bold">

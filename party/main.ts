@@ -292,22 +292,23 @@ export default class PsychServer implements Party.Server {
   }
 
   endVoting() {
-    // Calculate scores
+    // Calculate scores - only count votes for active players
     const voteCounts: Record<string, number> = {};
     Object.values(this.state.votes).forEach((votedFor) => {
-      voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1;
+      // Only count votes for players who are still in the game
+      if (this.state.players[votedFor]) {
+        voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1;
+      }
     });
 
-    // Find max votes
+    // Find max votes among active players only
     const maxVotes = Math.max(...Object.values(voteCounts), 0);
 
     // Award points
     Object.entries(voteCounts).forEach(([playerId, votes]) => {
-      if (this.state.players[playerId]) {
-        this.state.players[playerId].score += votes * 100;
-        if (votes === maxVotes && maxVotes > 0) {
-          this.state.players[playerId].score += 200;
-        }
+      this.state.players[playerId].score += votes * 100;
+      if (votes === maxVotes && maxVotes > 0) {
+        this.state.players[playerId].score += 200;
       }
     });
 
@@ -347,10 +348,15 @@ export default class PsychServer implements Party.Server {
           const existingNames = Object.values(this.state.players).map(p => p.name);
           if (existingNames.includes(name)) {
             let suffix = 2;
-            while (existingNames.includes(`${name} ${suffix}`)) {
+            // Truncate base name first to ensure suffix fits within 20 chars
+            const suffixStr = ` ${suffix}`;
+            let uniqueName = `${name.slice(0, 20 - suffixStr.length)}${suffixStr}`;
+            while (existingNames.includes(uniqueName)) {
               suffix++;
+              const newSuffixStr = ` ${suffix}`;
+              uniqueName = `${name.slice(0, 20 - newSuffixStr.length)}${newSuffixStr}`;
             }
-            name = `${name} ${suffix}`.slice(0, 20);
+            name = uniqueName;
           }
 
           this.state.players[sender.id] = {

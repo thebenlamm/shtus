@@ -50,9 +50,18 @@ export default function GamePage({
   const socketRef = useRef<PartySocket | null>(null);
 
   useEffect(() => {
+    // Generate or retrieve stable userId for session persistence across refreshes
+    const storageKey = `psych-user-${roomId}`;
+    let userId = localStorage.getItem(storageKey);
+    if (!userId) {
+      userId = crypto.randomUUID();
+      localStorage.setItem(storageKey, userId);
+    }
+
     const socket = new PartySocket({
       host: process.env.NEXT_PUBLIC_PARTYKIT_HOST || "localhost:1999",
       room: roomId,
+      id: userId,
     });
 
     socketRef.current = socket;

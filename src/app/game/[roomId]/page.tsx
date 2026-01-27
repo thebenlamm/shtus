@@ -111,7 +111,8 @@ export default function GamePage({
           if (prev.some(m => m.id === data.message.id)) {
             return prev;
           }
-          return [...prev, data.message];
+          // Sort to handle rare out-of-order WebSocket delivery
+          return [...prev, data.message].sort((a, b) => a.timestamp - b.timestamp);
         });
       }
     };

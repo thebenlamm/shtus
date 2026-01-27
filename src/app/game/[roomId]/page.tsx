@@ -69,7 +69,6 @@ export default function GamePage({
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
-  const [isChatOpen, setIsChatOpen] = useState(false); // For mobile drawer
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -292,37 +291,9 @@ export default function GamePage({
         {state.phase === "final" && `Game over. ${sortedPlayers[0]?.name} wins!`}
       </div>
 
-      {/* Mobile chat drawer */}
-      {isChatOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setIsChatOpen(false)} />
-          <div className="absolute right-0 top-0 bottom-0 w-80 max-w-full">
-            <div className="h-full flex flex-col">
-              <button
-                onClick={() => setIsChatOpen(false)}
-                className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-accent-bg text-white"
-                aria-label="Close chat"
-              >
-                ×
-              </button>
-              {renderChatPanel()}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mobile chat floating button */}
-      <button
-        onClick={() => setIsChatOpen(true)}
-        className="fixed bottom-4 right-4 z-40 lg:hidden w-14 h-14 rounded-full bg-purple-600 text-white shadow-lg flex items-center justify-center hover:bg-purple-700 transition-colors"
-        aria-label="Open chat"
-      >
-        💬
-      </button>
-
-      <div className="max-w-6xl mx-auto flex gap-4">
-        {/* Game area */}
-        <div className="flex-1 max-w-lg mx-auto lg:mx-0">
+      <div className="max-w-6xl mx-auto relative lg:pr-96">
+        {/* Game area - centered (pr-96 on lg accounts for fixed chat sidebar) */}
+        <div className="max-w-lg mx-auto">
           {/* Header */}
           <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2">
@@ -753,8 +724,8 @@ export default function GamePage({
           )}
         </div>
 
-        {/* Chat sidebar (desktop only) */}
-        <div className="hidden lg:block w-80 h-[calc(100vh-2rem)] sticky top-4">
+        {/* Chat sidebar (desktop only) - positioned on right edge */}
+        <div className="hidden lg:block fixed right-4 top-4 w-80 h-[calc(100vh-2rem)]">
           {renderChatPanel()}
         </div>
       </div>

@@ -79,12 +79,14 @@ async function generateSinglePrompt(
       : "Alex, Jordan, Sam, Riley";
 
     // Build history context for the prompt
+    // Sanitize history to prevent prompt injection from previous rounds
     let historyContext = "";
     if (roundHistory.length > 0) {
       const previousThemes = roundHistory.map(h => {
-        // Extract key theme words from the prompt
-        return h.prompt;
+        // Sanitize prompts to prevent injection via AI-generated content
+        return sanitizeForLLM(h.prompt);
       });
+      // topAnswers are already sanitized when stored in roundHistory
       const topAnswersAll = roundHistory.flatMap(h => h.topAnswers);
 
       historyContext = `
@@ -164,7 +166,9 @@ Generate 1 unique prompt. Return ONLY the prompt text, no quotes, no JSON, no ex
 }
 
 function replaceNamesInPrompts(prompts: string[], playerNames: string[]): string[] {
-  const names = playerNames.length > 0 ? playerNames : ["someone"];
+  // Sanitize names to prevent prompt injection when inserted into prompts
+  const sanitizedNames = playerNames.map(name => sanitizeForLLM(name));
+  const names = sanitizedNames.length > 0 ? sanitizedNames : ["someone"];
   return prompts.map(prompt => {
     if (prompt.includes("{name}")) {
       const randomName = names[Math.floor(Math.random() * names.length)];
@@ -199,6 +203,7 @@ interface Player {
   name: string;
   score: number;
   winStreak: number;
+  disconnectedAt?: number; // Timestamp when player disconnected (for reconnect grace period)
   answer?: string;
   vote?: string;
   isVoyeur?: boolean;
@@ -216,13 +221,14 @@ interface GameState {
   players: Record<string, Player>;
   hostId: string | null;
   currentPrompt: string;
-  promptSource: PromptSource; // Whether current prompt is from AI or fallback
+  promptSource: PromptSource | null; // Whether current prompt is from AI or fallback (null = unknown)
   nextPrompt: string | null; // Pre-generated next prompt
   nextPromptSource: PromptSource | null; // Source of next prompt
   theme: string;
   answers: Record<string, string>;
   votes: Record<string, string>;
   isGenerating: boolean;
+  generationId: number; // Incremented on restart/new game to invalidate stale async results
   answerOrder: string[]; // Shuffled playerIds for anonymous voting
   roundHistory: RoundHistory[];
 }
@@ -234,9 +240,21 @@ export default class PsychServer implements Party.Server {
     this.state = this.initialState();
   }
 
-  // Get players who are not in voyeur mode (active participants)
+  // Get players who are not in voyeur mode and are connected (active participants)
   getActivePlayers(): Player[] {
-    return Object.values(this.state.players).filter(p => !p.isVoyeur);
+    return Object.values(this.state.players).filter(p => !p.isVoyeur && !p.disconnectedAt);
+  }
+
+  // Clean up players who have been disconnected for more than 5 minutes
+  cleanupAbandonedPlayers() {
+    const GRACE_PERIOD_MS = 5 * 60 * 1000; // 5 minutes
+    const now = Date.now();
+
+    for (const [id, player] of Object.entries(this.state.players)) {
+      if (player.disconnectedAt && (now - player.disconnectedAt) > GRACE_PERIOD_MS) {
+        delete this.state.players[id];
+      }
+    }
   }
 
   initialState(): GameState {
@@ -247,13 +265,14 @@ export default class PsychServer implements Party.Server {
       players: {},
       hostId: null,
       currentPrompt: "",
-      promptSource: "ai",
+      promptSource: null, // null until first prompt generated
       nextPrompt: null,
       nextPromptSource: null,
       theme: "",
       answers: {},
       votes: {},
       isGenerating: false,
+      generationId: 0,
       answerOrder: [],
       roundHistory: [],
     };
@@ -331,6 +350,9 @@ export default class PsychServer implements Party.Server {
 
   
   startRound() {
+    // Clean up players who have been disconnected too long
+    this.cleanupAbandonedPlayers();
+
     if (this.state.roundLimit !== null && this.state.round >= this.state.roundLimit) {
       this.state.phase = PHASES.FINAL;
       this.sendState();
@@ -354,7 +376,8 @@ export default class PsychServer implements Party.Server {
     this.state.votes = {};
     this.state.phase = PHASES.WRITING;
     this.state.currentPrompt = this.state.nextPrompt;
-    this.state.promptSource = this.state.nextPromptSource || "ai";
+    // Preserve null for backward compatibility (unknown source from pre-deploy)
+    this.state.promptSource = this.state.nextPromptSource;
     this.state.nextPrompt = null; // Clear for next round
     this.state.nextPromptSource = null;
     this.sendState();
@@ -423,6 +446,7 @@ export default class PsychServer implements Party.Server {
       this.state.isGenerating = true;
       const apiKey = process.env.XAI_API_KEY || "";
       const playerNames = Object.values(this.state.players).map(p => p.name);
+      const currentGenId = this.state.generationId; // Capture to detect stale results
       generateSinglePrompt(
         this.state.theme,
         playerNames,
@@ -431,13 +455,21 @@ export default class PsychServer implements Party.Server {
         this.state.round + 1,
         this.state.roundLimit
       ).then((result) => {
+        // Discard result if game restarted while generating
+        if (this.state.generationId !== currentGenId) {
+          console.log("Discarding stale prompt generation result");
+          return;
+        }
         this.state.nextPrompt = result.prompt;
         this.state.nextPromptSource = result.source;
         this.state.isGenerating = false;
         this.sendState();
       }).catch((error) => {
-        console.error("Failed to pre-generate next prompt:", error);
-        this.state.isGenerating = false;
+        // Only clear generating flag if this generation is still current
+        if (this.state.generationId === currentGenId) {
+          console.error("Failed to pre-generate next prompt:", error);
+          this.state.isGenerating = false;
+        }
         // Fallback will be used in startRound()
       });
     }
@@ -452,19 +484,25 @@ export default class PsychServer implements Party.Server {
   }
 
   onClose(conn: Party.Connection) {
-    if (this.state.players[conn.id]) {
-      const wasHost = this.state.hostId === conn.id;
-      delete this.state.players[conn.id];
+    const player = this.state.players[conn.id];
+    if (player) {
+      // Soft-delete: mark as disconnected instead of removing
+      // Player can reconnect within grace period and retain score/streak
+      player.disconnectedAt = Date.now();
 
-      // Transfer host to another player if the host left (prefer active players)
+      const wasHost = this.state.hostId === conn.id;
+
+      // Transfer host to a connected active player if the host disconnected
       if (wasHost) {
-        const activePlayers = this.getActivePlayers();
-        if (activePlayers.length > 0) {
-          this.state.hostId = activePlayers[0].id;
+        const connectedActivePlayers = this.getActivePlayers()
+          .filter(p => !p.disconnectedAt);
+        if (connectedActivePlayers.length > 0) {
+          this.state.hostId = connectedActivePlayers[0].id;
         } else {
-          // Fall back to any remaining player (even voyeurs)
-          const remainingPlayerIds = Object.keys(this.state.players);
-          this.state.hostId = remainingPlayerIds.length > 0 ? remainingPlayerIds[0] : null;
+          // Fall back to any connected player (even voyeurs)
+          const connectedPlayerIds = Object.keys(this.state.players)
+            .filter(id => !this.state.players[id].disconnectedAt);
+          this.state.hostId = connectedPlayerIds.length > 0 ? connectedPlayerIds[0] : null;
         }
       }
 
@@ -478,31 +516,53 @@ export default class PsychServer implements Party.Server {
 
       switch (data.type) {
         case "join": {
-          let name = (data.name || "Player").trim().slice(0, 20);
+          const existingPlayer = this.state.players[sender.id];
 
-          // Handle duplicate names by appending a number
-          const existingNames = Object.values(this.state.players).map(p => p.name);
-          if (existingNames.includes(name)) {
-            let suffix = 2;
-            // Truncate base name first to ensure suffix fits within 20 chars
-            const suffixStr = ` ${suffix}`;
-            let uniqueName = `${name.slice(0, 20 - suffixStr.length)}${suffixStr}`;
-            while (existingNames.includes(uniqueName)) {
-              suffix++;
-              const newSuffixStr = ` ${suffix}`;
-              uniqueName = `${name.slice(0, 20 - newSuffixStr.length)}${newSuffixStr}`;
+          if (existingPlayer) {
+            // Reconnecting player - reactivate them, preserve score/streak
+            existingPlayer.disconnectedAt = undefined;
+            // Update name if they changed it
+            const newName = (data.name || "Player").trim().slice(0, 20);
+            if (newName !== existingPlayer.name) {
+              // Check for duplicate names (excluding this player's current name)
+              const otherNames = Object.values(this.state.players)
+                .filter(p => p.id !== sender.id)
+                .map(p => p.name);
+              if (!otherNames.includes(newName)) {
+                existingPlayer.name = newName;
+              }
+              // If name conflicts, keep their old name
             }
-            name = uniqueName;
+          } else {
+            // New player
+            let name = (data.name || "Player").trim().slice(0, 20);
+
+            // Handle duplicate names by appending a number
+            const existingNames = Object.values(this.state.players).map(p => p.name);
+            if (existingNames.includes(name)) {
+              let suffix = 2;
+              // Truncate base name first to ensure suffix fits within 20 chars
+              const suffixStr = ` ${suffix}`;
+              let uniqueName = `${name.slice(0, 20 - suffixStr.length)}${suffixStr}`;
+              while (existingNames.includes(uniqueName)) {
+                suffix++;
+                const newSuffixStr = ` ${suffix}`;
+                uniqueName = `${name.slice(0, 20 - newSuffixStr.length)}${newSuffixStr}`;
+              }
+              name = uniqueName;
+            }
+
+            this.state.players[sender.id] = {
+              id: sender.id,
+              name,
+              score: 0,
+              winStreak: 0,
+            };
           }
 
-          this.state.players[sender.id] = {
-            id: sender.id,
-            name,
-            score: 0,
-            winStreak: 0,
-          };
-          // Become host if no host, or if current hostId points to non-existent player
-          if (!this.state.hostId || !this.state.players[this.state.hostId]) {
+          // Become host if no host, or if current host is disconnected
+          const currentHost = this.state.hostId ? this.state.players[this.state.hostId] : null;
+          if (!currentHost || currentHost.disconnectedAt) {
             this.state.hostId = sender.id;
           }
           this.sendState();
@@ -529,12 +589,19 @@ export default class PsychServer implements Party.Server {
             this.state.theme = theme;
             this.state.isGenerating = true;
             this.state.roundHistory = []; // Reset history for new game
+            this.state.generationId++; // Invalidate any in-flight generations
             this.sendState();
 
             // Generate first prompt asynchronously
             const apiKey = process.env.XAI_API_KEY || "";
             const playerNames = Object.values(this.state.players).map(p => p.name);
+            const currentGenId = this.state.generationId;
             generateSinglePrompt(theme, playerNames, apiKey, [], 1, roundLimit).then((result) => {
+              // Discard result if game restarted while generating
+              if (this.state.generationId !== currentGenId) {
+                console.log("Discarding stale first prompt generation result");
+                return;
+              }
               this.state.nextPrompt = result.prompt;
               this.state.nextPromptSource = result.source;
               this.state.isGenerating = false;
@@ -623,6 +690,8 @@ export default class PsychServer implements Party.Server {
             this.state.roundHistory = [];
             this.state.nextPrompt = null;
             this.state.nextPromptSource = null;
+            this.state.promptSource = null;
+            this.state.generationId++; // Invalidate any in-flight generations
             this.sendState();
           }
           break;

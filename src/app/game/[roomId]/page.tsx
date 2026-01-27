@@ -8,6 +8,7 @@ interface Player {
   name: string;
   score: number;
   winStreak: number;
+  disconnectedAt?: number;
   isVoyeur?: boolean;
 }
 
@@ -26,7 +27,7 @@ interface GameState {
   players: Player[];
   hostId: string | null;
   currentPrompt: string;
-  promptSource: "ai" | "fallback";
+  promptSource: "ai" | "fallback" | null;
   theme: string;
   isGenerating: boolean;
   answers: Answer[];
@@ -128,7 +129,7 @@ export default function GamePage({
   const isHost = myId === state.hostId;
   const myPlayer = state.players.find(p => p.id === myId);
   const isVoyeur = myPlayer?.isVoyeur ?? false;
-  const activePlayers = state.players.filter(p => !p.isVoyeur);
+  const activePlayers = state.players.filter(p => !p.isVoyeur && !p.disconnectedAt);
   const sortedPlayers = [...state.players].sort((a, b) => b.score - a.score);
 
   // Render streak badge (shows when winStreak >= 2)
@@ -210,7 +211,9 @@ export default function GamePage({
                     <li
                       key={p.id}
                       className={`p-3 rounded-xl ${
-                        p.isVoyeur
+                        p.disconnectedAt
+                          ? "opacity-40 bg-gray-100 italic"
+                          : p.isVoyeur
                           ? "opacity-50 bg-gray-100"
                           : p.id === myId
                           ? "bg-purple-100 border-2 border-purple-500"
@@ -219,7 +222,8 @@ export default function GamePage({
                     >
                       {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
                       {p.name} {streakBadge(p)}
-                      {p.isVoyeur && <span className="ml-2 text-gray-500" role="img" aria-label="Watching"> 👁️</span>}
+                      {p.disconnectedAt && <span className="ml-2 text-gray-400" role="img" aria-label="Reconnecting"> ⏳</span>}
+                      {p.isVoyeur && !p.disconnectedAt && <span className="ml-2 text-gray-500" role="img" aria-label="Watching"> 👁️</span>}
                     </li>
                   ))}
                 </ul>
@@ -298,9 +302,11 @@ export default function GamePage({
           <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-8 text-center">
             <p className="text-gray-500 mb-4">Round {state.round}</p>
             <h2 className="text-3xl font-black text-gray-800">{state.currentPrompt}</h2>
-            <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
-              {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
-            </span>
+            {state.promptSource && (
+              <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
+                {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
+              </span>
+            )}
           </div>
         )}
 
@@ -308,11 +314,13 @@ export default function GamePage({
         {state.phase === "writing" && (
           <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
             <h2 className="text-xl font-bold text-center mb-1">{state.currentPrompt}</h2>
-            <p className="text-center mb-2">
-              <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
-                {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
-              </span>
-            </p>
+            {state.promptSource && (
+              <p className="text-center mb-2">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
+                  {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
+                </span>
+              </p>
+            )}
             {isVoyeur ? (
               <div className="text-center py-8" role="status">
                 <div className="text-6xl mb-4" role="img" aria-label="Watching">👁️</div>
@@ -396,11 +404,13 @@ export default function GamePage({
         {state.phase === "voting" && (
           <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
             <h2 className="text-xl font-bold text-center mb-1">{state.currentPrompt}</h2>
-            <p className="text-center mb-3">
-              <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
-                {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
-              </span>
-            </p>
+            {state.promptSource && (
+              <p className="text-center mb-3">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
+                  {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
+                </span>
+              </p>
+            )}
             {isVoyeur ? (
               <>
                 <div className="text-center py-4 mb-4">

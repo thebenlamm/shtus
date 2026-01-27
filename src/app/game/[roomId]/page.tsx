@@ -89,7 +89,7 @@ export default function GamePage({
 
   useEffect(() => {
     // Generate or retrieve stable userId for session persistence across refreshes
-    const storageKey = `psych-user-${roomId}`;
+    const storageKey = `shtus-user-${roomId}`;
     let userId = localStorage.getItem(storageKey);
     if (!userId) {
       userId = crypto.randomUUID();
@@ -97,7 +97,7 @@ export default function GamePage({
     }
 
     // Handle admin key: store from URL param or retrieve from localStorage
-    const adminStorageKey = `psych-admin-${roomId}`;
+    const adminStorageKey = `shtus-admin-${roomId}`;
     let adminKey: string | null = null;
     if (adminParam) {
       // New admin key from URL - store it
@@ -335,7 +335,7 @@ export default function GamePage({
 
   return (
     <main id="main" className="min-h-screen bg-gradient-to-br from-gradient-from via-gradient-via to-gradient-to p-4">
-      <h1 className="sr-only">Psych! Game Room {roomId}</h1>
+      <h1 className="sr-only">Shtus Game Room {roomId}</h1>
       {/* Screen reader announcements for game state changes */}
       <div aria-live="assertive" aria-atomic="true" className="sr-only">
         {state.phase === "writing" && `Round ${state.round}. ${state.currentPrompt}. Write your answer now.`}

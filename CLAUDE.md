@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Psych! is a real-time multiplayer party game built with Next.js 16 and PartyKit. Players submit funny answers to prompts, then vote on their favorites. The game features AI-generated prompts via xAI's Grok API with hardcoded fallbacks.
+Shtus is a real-time multiplayer party game built with Next.js 16 and PartyKit. Players submit funny answers to prompts, then vote on their favorites. The game features AI-generated prompts via xAI's Grok API with hardcoded fallbacks.
 
 ## Commands
 

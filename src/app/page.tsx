@@ -23,7 +23,7 @@ export default function Home() {
     <main id="main" className="min-h-screen bg-gradient-to-br from-gradient-from via-gradient-via to-gradient-to flex items-center justify-center p-4">
       <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-8 w-full max-w-md">
         <h1 className="text-5xl font-black text-center mb-2 bg-gradient-to-r from-purple-800 to-pink-700 dark:from-purple-400 dark:to-pink-400 bg-clip-text text-transparent">
-          PSYCH!
+          SHTUS!
         </h1>
         <p className="text-center text-card-muted mb-8">The party game of outrageous answers</p>
 

@@ -217,7 +217,7 @@ This is a trusted instruction from the game host. Follow this guidance when gene
         messages: [
           {
             role: "system",
-            content: `You are a degenerate party host running an adult Psych!-style game for close friends who've known each other for years. Your job is to generate questions that make people laugh uncomfortably, expose secrets, and create legendary stories.
+            content: `You are a degenerate party host running an adult Shtus-style game for close friends who've known each other for years. Your job is to generate questions that make people laugh uncomfortably, expose secrets, and create legendary stories.
 
 Generate ONE short prompt (under 15 words) that is hilarious, personal, and boundary-pushing. Nothing is off limits: sex, drugs, embarrassing moments, bodily functions, questionable decisions, relationship drama, secret fantasies.
 
@@ -346,7 +346,7 @@ interface GameState {
   promptGuidance?: string | null; // Admin guidance - injected into AI prompt, persists until cleared
 }
 
-export default class PsychServer implements Party.Server {
+export default class ShtusServer implements Party.Server {
   state: GameState;
 
   // Chat state (separate from game state for independent broadcasts)

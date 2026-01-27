@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Psych! - The Party Game",
+  title: "Shtus - The Party Game",
   description: "A multiplayer party game of outrageous answers",
 };
 

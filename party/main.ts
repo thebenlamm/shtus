@@ -391,27 +391,33 @@ export default class PsychServer implements Party.Server {
   }
 
   endVoting() {
-    // Calculate scores - only count votes for active players
+    // Calculate scores - only count votes for connected, active players
+    // Disconnected players' answers don't count toward scoring
     const voteCounts: Record<string, number> = {};
     Object.values(this.state.votes).forEach((votedFor) => {
-      // Only count votes for players who are still in the game
-      if (this.state.players[votedFor]) {
+      const player = this.state.players[votedFor];
+      // Only count votes for connected, non-voyeur players
+      if (player && !player.disconnectedAt && !player.isVoyeur) {
         voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1;
       }
     });
 
-    // Find max votes among active players only
+    // Find max votes among active (connected, non-voyeur) players only
     const maxVotes = Math.max(...Object.values(voteCounts), 0);
 
-    // Award points
+    // Award points only to connected players
     Object.entries(voteCounts).forEach(([playerId, votes]) => {
-      this.state.players[playerId].score += votes * 100;
-      if (votes === maxVotes && maxVotes > 0) {
-        this.state.players[playerId].score += 200;
+      const player = this.state.players[playerId];
+      if (player && !player.disconnectedAt) {
+        player.score += votes * 100;
+        if (votes === maxVotes && maxVotes > 0) {
+          player.score += 200;
+        }
       }
     });
 
     // Update win streaks - winners get +1, everyone else resets to 0
+    // Only applies to connected active players
     const activePlayers = this.getActivePlayers();
     activePlayers.forEach((player) => {
       const votes = voteCounts[player.id] || 0;
@@ -516,6 +522,9 @@ export default class PsychServer implements Party.Server {
 
       switch (data.type) {
         case "join": {
+          // Clean up abandoned players on every join (prevents lobby bloat)
+          this.cleanupAbandonedPlayers();
+
           const existingPlayer = this.state.players[sender.id];
 
           if (existingPlayer) {

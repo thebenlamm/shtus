@@ -49,6 +49,13 @@ function sanitizeForLLM(input: string): string {
   return input.replace(/[<>{}[\]\\]/g, "").trim();
 }
 
+type PromptSource = "ai" | "fallback";
+
+interface GeneratedPrompt {
+  prompt: string;
+  source: PromptSource;
+}
+
 // Generate a single prompt with history context
 async function generateSinglePrompt(
   theme: string,
@@ -57,11 +64,11 @@ async function generateSinglePrompt(
   roundHistory: RoundHistory[],
   roundNumber: number,
   roundLimit: number | null
-): Promise<string> {
+): Promise<GeneratedPrompt> {
   // If no API key, use hardcoded fallback
   if (!apiKey) {
     const hardcodedWithNames = replaceNamesInPrompts(HARDCODED_PROMPTS, playerNames);
-    return shuffleArray(hardcodedWithNames)[0];
+    return { prompt: shuffleArray(hardcodedWithNames)[0], source: "fallback" };
   }
 
   try {
@@ -133,7 +140,7 @@ Generate 1 unique prompt. Return ONLY the prompt text, no quotes, no JSON, no ex
     if (!response.ok) {
       console.error("xAI API error:", response.status);
       const hardcodedWithNames = replaceNamesInPrompts(HARDCODED_PROMPTS, playerNames);
-      return shuffleArray(hardcodedWithNames)[0];
+      return { prompt: shuffleArray(hardcodedWithNames)[0], source: "fallback" };
     }
 
     const data = await response.json();
@@ -143,16 +150,16 @@ Generate 1 unique prompt. Return ONLY the prompt text, no quotes, no JSON, no ex
     const cleanedPrompt = content.replace(/^["']|["']$/g, "").trim();
 
     if (cleanedPrompt.length > 0 && cleanedPrompt.length < 200) {
-      return cleanedPrompt;
+      return { prompt: cleanedPrompt, source: "ai" };
     }
 
     // Fallback to hardcoded
     const hardcodedWithNames = replaceNamesInPrompts(HARDCODED_PROMPTS, playerNames);
-    return shuffleArray(hardcodedWithNames)[0];
+    return { prompt: shuffleArray(hardcodedWithNames)[0], source: "fallback" };
   } catch (error) {
     console.error("Error generating single prompt:", error);
     const hardcodedWithNames = replaceNamesInPrompts(HARDCODED_PROMPTS, playerNames);
-    return shuffleArray(hardcodedWithNames)[0];
+    return { prompt: shuffleArray(hardcodedWithNames)[0], source: "fallback" };
   }
 }
 
@@ -209,7 +216,9 @@ interface GameState {
   players: Record<string, Player>;
   hostId: string | null;
   currentPrompt: string;
+  promptSource: PromptSource; // Whether current prompt is from AI or fallback
   nextPrompt: string | null; // Pre-generated next prompt
+  nextPromptSource: PromptSource | null; // Source of next prompt
   theme: string;
   answers: Record<string, string>;
   votes: Record<string, string>;
@@ -238,7 +247,9 @@ export default class PsychServer implements Party.Server {
       players: {},
       hostId: null,
       currentPrompt: "",
+      promptSource: "ai",
       nextPrompt: null,
+      nextPromptSource: null,
       theme: "",
       answers: {},
       votes: {},
@@ -272,6 +283,7 @@ export default class PsychServer implements Party.Server {
       players: Object.values(this.state.players),
       hostId: this.state.hostId,
       currentPrompt: this.state.currentPrompt,
+      promptSource: this.state.promptSource,
       theme: this.state.theme,
       isGenerating: this.state.isGenerating,
       submittedPlayerIds: activeSubmittedPlayerIds,
@@ -334,6 +346,7 @@ export default class PsychServer implements Party.Server {
         Object.values(this.state.players).map(p => p.name)
       );
       this.state.nextPrompt = shuffleArray(hardcodedWithNames)[0];
+      this.state.nextPromptSource = "fallback";
     }
 
     this.state.round++;
@@ -341,7 +354,9 @@ export default class PsychServer implements Party.Server {
     this.state.votes = {};
     this.state.phase = PHASES.WRITING;
     this.state.currentPrompt = this.state.nextPrompt;
+    this.state.promptSource = this.state.nextPromptSource || "ai";
     this.state.nextPrompt = null; // Clear for next round
+    this.state.nextPromptSource = null;
     this.sendState();
   }
 
@@ -370,6 +385,17 @@ export default class PsychServer implements Party.Server {
       this.state.players[playerId].score += votes * 100;
       if (votes === maxVotes && maxVotes > 0) {
         this.state.players[playerId].score += 200;
+      }
+    });
+
+    // Update win streaks - winners get +1, everyone else resets to 0
+    const activePlayers = this.getActivePlayers();
+    activePlayers.forEach((player) => {
+      const votes = voteCounts[player.id] || 0;
+      if (votes === maxVotes && maxVotes > 0) {
+        player.winStreak++;
+      } else {
+        player.winStreak = 0;
       }
     });
 
@@ -404,8 +430,9 @@ export default class PsychServer implements Party.Server {
         this.state.roundHistory,
         this.state.round + 1,
         this.state.roundLimit
-      ).then((prompt) => {
-        this.state.nextPrompt = prompt;
+      ).then((result) => {
+        this.state.nextPrompt = result.prompt;
+        this.state.nextPromptSource = result.source;
         this.state.isGenerating = false;
         this.sendState();
       }).catch((error) => {
@@ -507,8 +534,9 @@ export default class PsychServer implements Party.Server {
             // Generate first prompt asynchronously
             const apiKey = process.env.XAI_API_KEY || "";
             const playerNames = Object.values(this.state.players).map(p => p.name);
-            generateSinglePrompt(theme, playerNames, apiKey, [], 1, roundLimit).then((prompt) => {
-              this.state.nextPrompt = prompt;
+            generateSinglePrompt(theme, playerNames, apiKey, [], 1, roundLimit).then((result) => {
+              this.state.nextPrompt = result.prompt;
+              this.state.nextPromptSource = result.source;
               this.state.isGenerating = false;
               this.startRound();
             });
@@ -582,8 +610,11 @@ export default class PsychServer implements Party.Server {
             sender.id === this.state.hostId &&
             this.state.phase === PHASES.FINAL
           ) {
-            // Keep players but reset scores
-            Object.values(this.state.players).forEach((p) => (p.score = 0));
+            // Keep players but reset scores and streaks
+            Object.values(this.state.players).forEach((p) => {
+              p.score = 0;
+              p.winStreak = 0;
+            });
             this.state.round = 0;
             this.state.phase = PHASES.LOBBY;
             this.state.theme = "";
@@ -591,6 +622,7 @@ export default class PsychServer implements Party.Server {
             this.state.votes = {};
             this.state.roundHistory = [];
             this.state.nextPrompt = null;
+            this.state.nextPromptSource = null;
             this.sendState();
           }
           break;

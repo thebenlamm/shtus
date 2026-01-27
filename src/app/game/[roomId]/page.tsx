@@ -7,6 +7,7 @@ interface Player {
   id: string;
   name: string;
   score: number;
+  winStreak: number;
   isVoyeur?: boolean;
 }
 
@@ -25,6 +26,7 @@ interface GameState {
   players: Player[];
   hostId: string | null;
   currentPrompt: string;
+  promptSource: "ai" | "fallback";
   theme: string;
   isGenerating: boolean;
   answers: Answer[];
@@ -129,6 +131,14 @@ export default function GamePage({
   const activePlayers = state.players.filter(p => !p.isVoyeur);
   const sortedPlayers = [...state.players].sort((a, b) => b.score - a.score);
 
+  // Render streak badge (shows when winStreak >= 2)
+  const streakBadge = (player: Player) =>
+    player.winStreak >= 2 ? (
+      <span className="text-orange-500" title={`${player.winStreak}-win streak!`}>
+        🔥{player.winStreak}
+      </span>
+    ) : null;
+
   const copyLink = () => {
     const url = `${window.location.origin}/join/${roomId}`;
     navigator.clipboard.writeText(url);
@@ -208,7 +218,7 @@ export default function GamePage({
                       }`}
                     >
                       {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
-                      {p.name}
+                      {p.name} {streakBadge(p)}
                       {p.isVoyeur && <span className="ml-2 text-gray-500" role="img" aria-label="Watching"> 👁️</span>}
                     </li>
                   ))}
@@ -288,13 +298,21 @@ export default function GamePage({
           <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-8 text-center">
             <p className="text-gray-500 mb-4">Round {state.round}</p>
             <h2 className="text-3xl font-black text-gray-800">{state.currentPrompt}</h2>
+            <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
+              {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
+            </span>
           </div>
         )}
 
         {/* WRITING */}
         {state.phase === "writing" && (
           <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
-            <h2 className="text-xl font-bold text-center mb-2">{state.currentPrompt}</h2>
+            <h2 className="text-xl font-bold text-center mb-1">{state.currentPrompt}</h2>
+            <p className="text-center mb-2">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
+                {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
+              </span>
+            </p>
             {isVoyeur ? (
               <div className="text-center py-8" role="status">
                 <div className="text-6xl mb-4" role="img" aria-label="Watching">👁️</div>
@@ -356,7 +374,7 @@ export default function GamePage({
                     }`}
                   >
                     {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
-                    {p.name}
+                    {p.name} {streakBadge(p)}
                     {p.isVoyeur && <span role="img" aria-label="Watching"> 👁️</span>}
                     {!p.isVoyeur && state.submittedPlayerIds?.includes(p.id) && <span role="img" aria-label="Submitted"> ✓</span>}
                   </span>
@@ -377,7 +395,12 @@ export default function GamePage({
         {/* VOTING */}
         {state.phase === "voting" && (
           <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
-            <h2 className="text-xl font-bold text-center mb-4">{state.currentPrompt}</h2>
+            <h2 className="text-xl font-bold text-center mb-1">{state.currentPrompt}</h2>
+            <p className="text-center mb-3">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
+                {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
+              </span>
+            </p>
             {isVoyeur ? (
               <>
                 <div className="text-center py-4 mb-4">
@@ -444,7 +467,7 @@ export default function GamePage({
                     }`}
                   >
                     {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
-                    {p.name}
+                    {p.name} {streakBadge(p)}
                     {p.isVoyeur && <span role="img" aria-label="Watching"> 👁️</span>}
                     {!p.isVoyeur && state.votedPlayerIds?.includes(p.id) && <span role="img" aria-label="Voted"> ✓</span>}
                   </span>
@@ -479,7 +502,7 @@ export default function GamePage({
                     >
                       <div className="font-bold text-lg">{a.answer}</div>
                       <div className="flex justify-between text-sm text-gray-600 mt-1">
-                        <span>- {player?.name}</span>
+                        <span>- {player?.name} {player && streakBadge(player)}</span>
                         <span>
                           {a.votes} vote{a.votes !== 1 ? "s" : ""}{" "}
                           {isWinner && a.votes > 0 && <span className="text-yellow-600">+{a.votes * 100 + 200}pts</span>}
@@ -522,7 +545,7 @@ export default function GamePage({
                   <span>
                     {i === 0 && !p.isVoyeur && <span role="img" aria-label="Winner">🏆 </span>}
                     {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
-                    {p.name}
+                    {p.name} {streakBadge(p)}
                     {p.isVoyeur && <span role="img" aria-label="Watching"> 👁️</span>}
                   </span>
                   <span className="font-bold">{p.score} pts</span>
@@ -549,7 +572,7 @@ export default function GamePage({
                 <div key={p.id} className={`flex justify-between ${p.isVoyeur ? "opacity-50" : ""}`}>
                   <span>
                     {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
-                    {p.name}
+                    {p.name} {streakBadge(p)}
                     {p.isVoyeur && <span role="img" aria-label="Watching"> 👁️</span>}
                   </span>
                   <span>{p.score}</span>

@@ -8,7 +8,8 @@
     "dev:all": "npm run party & npm run dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "deploy": "npx partykit deploy && vercel --prod"
   },
   "dependencies": {
     "next": "16.1.4",

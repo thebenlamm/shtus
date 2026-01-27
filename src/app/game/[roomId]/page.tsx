@@ -10,9 +10,11 @@ interface Player {
 }
 
 interface Answer {
-  playerId: string;
+  answerId: number;
+  playerId?: string; // Only present in REVEAL phase
   answer: string;
   votes: number;
+  isOwn?: boolean; // Only present in VOTING phase
 }
 
 interface GameState {
@@ -94,8 +96,8 @@ export default function GamePage({
       setHasSubmitted(true);
     }
   };
-  const vote = (playerId: string) => {
-    send({ type: "vote", votedFor: playerId });
+  const vote = (answerId: number) => {
+    send({ type: "vote", votedFor: answerId });
     setHasVoted(true);
   };
   const restart = () => send({ type: "restart" });
@@ -291,17 +293,17 @@ export default function GamePage({
             {!hasVoted ? (
               <div className="space-y-3">
                 {state.answers
-                  .filter((a) => a.playerId !== myId)
-                  .map((a, i) => (
+                  .filter((a) => !a.isOwn)
+                  .map((a) => (
                     <button
-                      key={i}
-                      onClick={() => vote(a.playerId)}
+                      key={a.answerId}
+                      onClick={() => vote(a.answerId)}
                       className="w-full p-4 bg-gray-100 rounded-xl text-left hover:bg-purple-100 hover:border-purple-500 border-2 border-transparent transition-colors"
                     >
                       {a.answer}
                     </button>
                   ))}
-                {state.answers.filter((a) => a.playerId !== myId).length === 0 && (
+                {state.answers.filter((a) => !a.isOwn).length === 0 && (
                   <p className="text-center text-gray-500">No other answers to vote on</p>
                 )}
               </div>

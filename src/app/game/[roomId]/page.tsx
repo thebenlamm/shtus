@@ -113,9 +113,9 @@ export default function GamePage({
 
   if (!state) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center">
-        <div className="text-white text-2xl">Connecting...</div>
-      </div>
+      <main id="main" className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center" aria-busy="true">
+        <div role="status" aria-live="polite" className="text-white text-2xl">Connecting...</div>
+      </main>
     );
   }
 
@@ -131,6 +131,7 @@ export default function GamePage({
 
   return (
     <main id="main" className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 p-4">
+      <h1 className="sr-only">Psych! Game Room {roomId}</h1>
       {/* Screen reader announcements for game state changes */}
       <div aria-live="assertive" aria-atomic="true" className="sr-only">
         {state.phase === "writing" && `Round ${state.round}. ${state.currentPrompt}. Write your answer now.`}
@@ -169,22 +170,22 @@ export default function GamePage({
 
             {state.isGenerating ? (
               <div className="text-center py-8">
-                <div className="text-4xl mb-4 animate-pulse">🎲</div>
+                <div className="text-4xl mb-4 animate-pulse" role="img" aria-label="Generating">🎲</div>
                 <p className="text-gray-600">AI is cooking up questions about:</p>
                 <p className="text-purple-600 font-bold text-lg mt-2">{state.theme}</p>
               </div>
             ) : (
               <>
-                <div className="space-y-2 mb-6">
+                <ul className="space-y-2 mb-6" aria-label="Players in room">
                   {state.players.map((p) => (
-                    <div
+                    <li
                       key={p.id}
                       className={`p-3 rounded-xl ${p.id === myId ? "bg-purple-100 border-2 border-purple-500" : "bg-gray-100"}`}
                     >
-                      {p.id === state.hostId && "👑 "}{p.name}
-                    </div>
+                      {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}{p.name}
+                    </li>
                   ))}
-                </div>
+                </ul>
 
                 {isHost && (
                   <div className="mb-4">
@@ -197,7 +198,7 @@ export default function GamePage({
                       placeholder="e.g., The naked truth, Office nightmares, Dating disasters"
                       value={theme}
                       onChange={(e) => setTheme(e.target.value)}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:outline-none"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-500 focus:border-purple-500 focus:outline-none"
                       maxLength={100}
                     />
                   </div>
@@ -243,7 +244,7 @@ export default function GamePage({
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value.slice(0, 100))}
                   placeholder="Type your answer..."
-                  className="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:outline-none text-lg resize-none h-32"
+                  className="w-full p-4 rounded-xl border-2 border-gray-500 focus:border-purple-500 focus:outline-none text-lg resize-none h-32"
                   maxLength={100}
                   aria-describedby="char-count"
                 />
@@ -279,7 +280,7 @@ export default function GamePage({
                         : "bg-gray-200 text-gray-500"
                     }`}
                   >
-                    {p.id === state.hostId && "👑 "}{p.name} {state.submittedPlayerIds?.includes(p.id) && "✓"}
+                    {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}{p.name} {state.submittedPlayerIds?.includes(p.id) && <span role="img" aria-label="Submitted">✓</span>}
                   </span>
                 ))}
               </div>
@@ -337,7 +338,7 @@ export default function GamePage({
                         : "bg-gray-200 text-gray-500"
                     }`}
                   >
-                    {p.id === state.hostId && "👑 "}{p.name} {state.votedPlayerIds?.includes(p.id) && "✓"}
+                    {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}{p.name} {state.votedPlayerIds?.includes(p.id) && <span role="img" aria-label="Voted">✓</span>}
                   </span>
                 ))}
               </div>
@@ -405,7 +406,7 @@ export default function GamePage({
                   className={`p-3 rounded-xl flex justify-between ${i === 0 ? "bg-yellow-100 border-2 border-yellow-400" : "bg-gray-100"}`}
                 >
                   <span>
-                    {i === 0 && "🏆 "}{p.id === state.hostId && "👑 "}{p.name}
+                    {i === 0 && <span role="img" aria-label="Winner">🏆 </span>}{p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}{p.name}
                   </span>
                   <span className="font-bold">{p.score} pts</span>
                 </div>
@@ -429,7 +430,7 @@ export default function GamePage({
             <div className="grid grid-cols-2 gap-2 text-sm text-white">
               {sortedPlayers.map((p) => (
                 <div key={p.id} className="flex justify-between">
-                  <span>{p.id === state.hostId && "👑 "}{p.name}</span>
+                  <span>{p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}{p.name}</span>
                   <span>{p.score}</span>
                 </div>
               ))}

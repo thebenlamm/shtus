@@ -42,9 +42,22 @@ body {
 *:focus-visible {
   outline: 3px solid #005fcc;
   outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.8);
 }
 
 /* Accessibility: Remove default focus for mouse users */
 *:focus:not(:focus-visible) {
   outline: none;
+}
+
+/* Accessibility: Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

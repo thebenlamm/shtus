@@ -283,7 +283,15 @@ export default class PsychServer implements Party.Server {
 
   onClose(conn: Party.Connection) {
     if (this.state.players[conn.id]) {
+      const wasHost = this.state.hostId === conn.id;
       delete this.state.players[conn.id];
+
+      // Transfer host to another player if the host left
+      if (wasHost) {
+        const remainingPlayerIds = Object.keys(this.state.players);
+        this.state.hostId = remainingPlayerIds.length > 0 ? remainingPlayerIds[0] : null;
+      }
+
       this.sendState();
     }
   }
@@ -300,7 +308,8 @@ export default class PsychServer implements Party.Server {
             name,
             score: 0,
           };
-          if (!this.state.hostId) {
+          // Become host if no host, or if current hostId points to non-existent player
+          if (!this.state.hostId || !this.state.players[this.state.hostId]) {
             this.state.hostId = sender.id;
           }
           this.sendState();

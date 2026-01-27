@@ -45,8 +45,13 @@ const HARDCODED_PROMPTS = [
 
 // Sanitize user input to prevent prompt injection
 function sanitizeForLLM(input: string): string {
-  // Remove special characters that could be used for injection, keep alphanumeric, spaces, and basic punctuation
-  return input.replace(/[<>{}[\]\\]/g, "").trim();
+  // Allowlist approach: only permit safe characters
+  // - Alphanumeric, spaces, and common punctuation needed for names/text
+  // - Collapse all whitespace to single spaces (prevents newline injection attacks)
+  return input
+    .replace(/[^a-zA-Z0-9\s.,!?'"-]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 type PromptSource = "ai" | "fallback";
@@ -66,7 +71,9 @@ async function generateSinglePrompt(
   roundLimit: number | null
 ): Promise<GeneratedPrompt> {
   // If no API key, use hardcoded fallback
+  console.log("[DEBUG] generateSinglePrompt called, apiKey length:", apiKey?.length || 0);
   if (!apiKey) {
+    console.log("[DEBUG] No API key, using fallback");
     const hardcodedWithNames = replaceNamesInPrompts(HARDCODED_PROMPTS, playerNames);
     return { prompt: shuffleArray(hardcodedWithNames)[0], source: "fallback" };
   }
@@ -139,13 +146,16 @@ Generate 1 unique prompt. Return ONLY the prompt text, no quotes, no JSON, no ex
       }),
     });
 
+    console.log("[DEBUG] API response status:", response.status);
     if (!response.ok) {
-      console.error("xAI API error:", response.status);
+      const errorText = await response.text();
+      console.error("xAI API error:", response.status, errorText);
       const hardcodedWithNames = replaceNamesInPrompts(HARDCODED_PROMPTS, playerNames);
       return { prompt: shuffleArray(hardcodedWithNames)[0], source: "fallback" };
     }
 
     const data = await response.json();
+    console.log("[DEBUG] API response data:", JSON.stringify(data).slice(0, 500));
     const content = (data.choices?.[0]?.message?.content || "").trim();
 
     // Clean up the response - remove quotes if present
@@ -450,7 +460,7 @@ export default class PsychServer implements Party.Server {
     // Pre-generate next prompt if not the final round
     if (this.state.roundLimit === null || this.state.round < this.state.roundLimit) {
       this.state.isGenerating = true;
-      const apiKey = process.env.XAI_API_KEY || "";
+      const apiKey = this.room.env.XAI_API_KEY || "";
       const playerNames = Object.values(this.state.players).map(p => p.name);
       const currentGenId = this.state.generationId; // Capture to detect stale results
       generateSinglePrompt(
@@ -602,7 +612,8 @@ export default class PsychServer implements Party.Server {
             this.sendState();
 
             // Generate first prompt asynchronously
-            const apiKey = process.env.XAI_API_KEY || "";
+            const apiKey = this.room.env.XAI_API_KEY || "";
+            console.log("[DEBUG] Starting game, XAI_API_KEY exists:", !!apiKey, "length:", apiKey.length);
             const playerNames = Object.values(this.state.players).map(p => p.name);
             const currentGenId = this.state.generationId;
             generateSinglePrompt(theme, playerNames, apiKey, [], 1, roundLimit).then((result) => {

@@ -25,6 +25,8 @@ interface GameState {
   isGenerating: boolean;
   answers: Answer[];
   votes: Record<string, string>;
+  submittedPlayerIds: string[];
+  votedPlayerIds: string[];
 }
 
 export default function GamePage({
@@ -251,6 +253,26 @@ export default function GamePage({
                 <p className="text-gray-500">Answer submitted. Waiting for others...</p>
               </div>
             )}
+            {/* Submission progress */}
+            <div className="mt-4 p-3 bg-gray-100 rounded-xl">
+              <p className="text-sm text-gray-600 mb-2">
+                Submitted: {state.submittedPlayerIds?.length || 0}/{state.players.length}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {state.players.map((p) => (
+                  <span
+                    key={p.id}
+                    className={`text-xs px-2 py-1 rounded-full ${
+                      state.submittedPlayerIds?.includes(p.id)
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-200 text-gray-500"
+                    }`}
+                  >
+                    {p.name} {state.submittedPlayerIds?.includes(p.id) && "✓"}
+                  </span>
+                ))}
+              </div>
+            </div>
             {isHost && (
               <button
                 onClick={endWriting}
@@ -289,6 +311,26 @@ export default function GamePage({
                 <p className="text-gray-500">Vote submitted. Waiting for others...</p>
               </div>
             )}
+            {/* Voting progress */}
+            <div className="mt-4 p-3 bg-gray-100 rounded-xl">
+              <p className="text-sm text-gray-600 mb-2">
+                Voted: {state.votedPlayerIds?.length || 0}/{state.players.length}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {state.players.map((p) => (
+                  <span
+                    key={p.id}
+                    className={`text-xs px-2 py-1 rounded-full ${
+                      state.votedPlayerIds?.includes(p.id)
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-200 text-gray-500"
+                    }`}
+                  >
+                    {p.name} {state.votedPlayerIds?.includes(p.id) && "✓"}
+                  </span>
+                ))}
+              </div>
+            </div>
             {isHost && (
               <button
                 onClick={endVoting}

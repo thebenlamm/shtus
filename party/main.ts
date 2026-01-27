@@ -225,6 +225,8 @@ export default class PsychServer implements Party.Server {
             }))
           : [],
       votes: this.state.phase === PHASES.REVEAL ? this.state.votes : {},
+      submittedPlayerIds: Object.keys(this.state.answers),
+      votedPlayerIds: Object.keys(this.state.votes),
     };
     this.broadcast(publicState);
   }

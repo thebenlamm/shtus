@@ -13,7 +13,8 @@ Add super admin controls during gameplay that allow the app creator to influence
 - Access via URL param: `?admin=SECRET_KEY`
 - Server validates against `ADMIN_SECRET_KEY` environment variable
 - On valid auth, player marked with `isAdmin: true`
-- Admin status persists for session (stored in localStorage alongside userId)
+- Client stores admin key in localStorage (alongside userId) for reconnection
+- On reconnect, client re-sends admin key; server re-validates before restoring `isAdmin`
 
 ## State Changes
 
@@ -98,7 +99,11 @@ Players: ${playerNames.join(', ')}
 
 ### Validation
 
-- `exactQuestion`: No sanitization (trusted admin), but validate non-empty and reasonable length (<500 chars)
+- `exactQuestion`: Trusted admin input, but validate for robustness:
+  - Non-empty string
+  - Length: 1-500 characters
+  - Valid unicode (no null bytes or control characters)
+  - Trimmed whitespace
 - `promptGuidance`: Sanitized via `sanitizeForLLM()` since it's injected into AI prompt
 
 ## WebSocket Messages
@@ -139,7 +144,7 @@ Players: ${playerNames.join(', ')}
 
 | Case | Behavior |
 |------|----------|
-| Admin disconnects/reconnects | `isAdmin` restored via localStorage admin key + server re-validation |
+| Admin disconnects/reconnects | Client re-sends admin key from localStorage in join message; server re-validates against env var before restoring `isAdmin` |
 | Multiple admins | All see same override state, last write wins |
 | Override set during WRITING | Takes effect next round |
 | Admin toggles voyeur mode | Admin panel remains visible |
@@ -147,9 +152,9 @@ Players: ${playerNames.join(', ')}
 
 ## Security
 
-- Admin key never sent to non-admin clients
-- Server validates admin key on every join (not just stored client-side)
-- `admin-set-override` messages rejected if sender is not admin
+- Override state (`exactQuestion`, `promptGuidance`) never broadcast to non-admin clients
+- Server validates admin key on every join/reconnect (not just stored client-side)
+- Server checks `player.isAdmin` on every `admin-set-override` message (per-message validation)
 - Guidance sanitized before AI injection
 - Admin actions logged to server console
 

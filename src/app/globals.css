@@ -1,22 +1,118 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Light mode gradient (vibrant) */
+  --gradient-from: #9333ea;
+  --gradient-via: #ec4899;
+  --gradient-to: #f97316;
+
+  /* Light mode cards */
+  --card-bg: rgba(255, 255, 255, 0.95);
+  --card-text: #1f2937;
+  --card-muted: #6b7280;
+  --card-border: #d1d5db;
+
+  /* Light mode inputs */
+  --input-bg: #ffffff;
+  --input-border: #6b7280;
+  --input-focus: #9333ea;
+
+  /* Light mode accents */
+  --accent-bg: rgba(0, 0, 0, 0.5);
+  --progress-bg: #f3f4f6;
+  --submitted-bg: #dcfce7;
+  --submitted-text: #15803d;
+  --winner-bg: #fef9c3;
+  --winner-border: #facc15;
+
+  /* Light mode buttons & labels */
+  --btn-secondary: #1f2937;
+  --btn-secondary-hover: #374151;
+  --btn-inactive: #e5e7eb;
+  --btn-inactive-hover: #d1d5db;
+  --label-text: #374151;
+  --muted-extra: #9ca3af;
+
+  /* Light mode selection/highlight */
+  --highlight-bg: #f3e8ff;
+  --highlight-border: #a855f7;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  /* Dark mode gradient (muted) */
+  --gradient-from: #581c87;
+  --gradient-via: #831843;
+  --gradient-to: #7c2d12;
+
+  /* Dark mode cards */
+  --card-bg: rgba(30, 30, 35, 0.95);
+  --card-text: #f3f4f6;
+  --card-muted: #9ca3af;
+  --card-border: #374151;
+
+  /* Dark mode inputs */
+  --input-bg: #1f2937;
+  --input-border: #4b5563;
+  --input-focus: #a855f7;
+
+  /* Dark mode accents */
+  --accent-bg: rgba(0, 0, 0, 0.7);
+  --progress-bg: #1f2937;
+  --submitted-bg: #14532d;
+  --submitted-text: #86efac;
+  --winner-bg: #422006;
+  --winner-border: #a16207;
+
+  /* Dark mode buttons & labels */
+  --btn-secondary: #374151;
+  --btn-secondary-hover: #4b5563;
+  --btn-inactive: #374151;
+  --btn-inactive-hover: #4b5563;
+  --label-text: #d1d5db;
+  --muted-extra: #6b7280;
+
+  /* Dark mode selection/highlight */
+  --highlight-bg: #3b0764;
+  --highlight-border: #a855f7;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-gradient-from: var(--gradient-from);
+  --color-gradient-via: var(--gradient-via);
+  --color-gradient-to: var(--gradient-to);
+  --color-card-bg: var(--card-bg);
+  --color-card-text: var(--card-text);
+  --color-card-muted: var(--card-muted);
+  --color-card-border: var(--card-border);
+  --color-input-bg: var(--input-bg);
+  --color-input-border: var(--input-border);
+  --color-input-focus: var(--input-focus);
+  --color-accent-bg: var(--accent-bg);
+  --color-progress-bg: var(--progress-bg);
+  --color-submitted-bg: var(--submitted-bg);
+  --color-submitted-text: var(--submitted-text);
+  --color-winner-bg: var(--winner-bg);
+  --color-winner-border: var(--winner-border);
+  --color-btn-secondary: var(--btn-secondary);
+  --color-btn-secondary-hover: var(--btn-secondary-hover);
+  --color-btn-inactive: var(--btn-inactive);
+  --color-btn-inactive-hover: var(--btn-inactive-hover);
+  --color-label-text: var(--label-text);
+  --color-muted-extra: var(--muted-extra);
+  --color-highlight-bg: var(--highlight-bg);
+  --color-highlight-border: var(--highlight-border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {

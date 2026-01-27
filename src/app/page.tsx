@@ -20,12 +20,12 @@ export default function Home() {
   };
 
   return (
-    <main id="main" className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center p-4">
-      <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-8 w-full max-w-md">
-        <h1 className="text-5xl font-black text-center mb-2 bg-gradient-to-r from-purple-800 to-pink-700 bg-clip-text text-transparent">
+    <main id="main" className="min-h-screen bg-gradient-to-br from-gradient-from via-gradient-via to-gradient-to flex items-center justify-center p-4">
+      <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-8 w-full max-w-md">
+        <h1 className="text-5xl font-black text-center mb-2 bg-gradient-to-r from-purple-800 to-pink-700 dark:from-purple-400 dark:to-pink-400 bg-clip-text text-transparent">
           PSYCH!
         </h1>
-        <p className="text-center text-gray-500 mb-8">The party game of outrageous answers</p>
+        <p className="text-center text-card-muted mb-8">The party game of outrageous answers</p>
 
         <div className="space-y-4">
           <div>
@@ -36,7 +36,7 @@ export default function Home() {
               placeholder="Your Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border-2 border-gray-500 focus:border-purple-500 focus:outline-none text-lg"
+              className="w-full px-4 py-3 rounded-xl border-2 border-input-border focus:border-purple-500 focus:outline-none text-lg bg-input-bg text-card-text"
               maxLength={20}
               autoComplete="name"
             />
@@ -52,10 +52,10 @@ export default function Home() {
 
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
+              <div className="w-full border-t border-card-border"></div>
             </div>
             <div className="relative flex justify-center">
-              <span className="bg-white px-4 text-gray-500">or join existing</span>
+              <span className="bg-input-bg px-4 text-card-muted">or join existing</span>
             </div>
           </div>
 
@@ -67,7 +67,7 @@ export default function Home() {
               placeholder="Room Code"
               value={roomCode}
               onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-              className="w-full px-4 py-3 rounded-xl border-2 border-gray-500 focus:border-purple-500 focus:outline-none text-lg text-center tracking-widest font-mono"
+              className="w-full px-4 py-3 rounded-xl border-2 border-input-border focus:border-purple-500 focus:outline-none text-lg text-center tracking-widest font-mono bg-input-bg text-card-text"
               maxLength={6}
             />
           </div>
@@ -75,7 +75,7 @@ export default function Home() {
           <button
             onClick={joinRoom}
             disabled={!name.trim() || !roomCode.trim()}
-            className="w-full py-4 bg-gray-800 text-white text-xl font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-700 transition-colors active:scale-95"
+            className="w-full py-4 bg-btn-secondary text-white text-xl font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-btn-secondary-hover transition-colors active:scale-95"
           >
             JOIN GAME
           </button>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, use } from "react";
 import PartySocket from "partysocket";
+import { useTheme } from "@/hooks/useTheme";
 
 interface Player {
   id: string;
@@ -54,6 +55,7 @@ export default function GamePage({
   const [roundLimit, setRoundLimit] = useState<number | null>(null); // Default to endless
   const [copied, setCopied] = useState(false);
   const socketRef = useRef<PartySocket | null>(null);
+  const { theme: colorTheme, toggleTheme } = useTheme();
 
   useEffect(() => {
     // Generate or retrieve stable userId for session persistence across refreshes
@@ -120,7 +122,7 @@ export default function GamePage({
 
   if (!state) {
     return (
-      <main id="main" className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center" aria-busy="true">
+      <main id="main" className="min-h-screen bg-gradient-to-br from-gradient-from via-gradient-via to-gradient-to flex items-center justify-center" aria-busy="true">
         <div role="status" aria-live="polite" className="text-white text-2xl">Connecting...</div>
       </main>
     );
@@ -148,7 +150,7 @@ export default function GamePage({
   };
 
   return (
-    <main id="main" className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 p-4">
+    <main id="main" className="min-h-screen bg-gradient-to-br from-gradient-from via-gradient-via to-gradient-to p-4">
       <h1 className="sr-only">Psych! Game Room {roomId}</h1>
       {/* Screen reader announcements for game state changes */}
       <div aria-live="assertive" aria-atomic="true" className="sr-only">
@@ -161,12 +163,12 @@ export default function GamePage({
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2">
-            <div className="bg-black/50 backdrop-blur px-4 py-2 rounded-full text-white font-bold">
+            <div className="bg-accent-bg backdrop-blur px-4 py-2 rounded-full text-white font-bold">
               Room: {roomId}
             </div>
             <button
               onClick={copyLink}
-              className="bg-black/50 backdrop-blur px-3 py-2 rounded-full text-white font-bold hover:bg-black/70 transition-colors"
+              className="bg-accent-bg backdrop-blur px-3 py-2 rounded-full text-white font-bold hover:bg-black/70 transition-colors"
               aria-label="Copy invite link"
             >
               {copied ? "Copied!" : "Copy Link"}
@@ -176,16 +178,23 @@ export default function GamePage({
               className={`backdrop-blur px-3 py-2 rounded-full font-bold transition-colors ${
                 isVoyeur
                   ? "bg-purple-600 text-white hover:bg-purple-700"
-                  : "bg-black/50 text-white hover:bg-black/70"
+                  : "bg-accent-bg text-white hover:bg-black/70"
               }`}
               aria-label={isVoyeur ? "Rejoin as player" : "Switch to watching mode"}
               aria-pressed={isVoyeur}
             >
               {isVoyeur ? "👁️ Watching" : "👁️"}
             </button>
+            <button
+              onClick={toggleTheme}
+              className="bg-accent-bg backdrop-blur px-3 py-2 rounded-full font-bold text-white hover:bg-black/70 transition-colors"
+              aria-label={colorTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {colorTheme === "dark" ? "☀️" : "🌙"}
+            </button>
           </div>
           {state.round > 0 && (
-            <div className="bg-black/50 backdrop-blur px-4 py-2 rounded-full text-white font-bold">
+            <div className="bg-accent-bg backdrop-blur px-4 py-2 rounded-full text-white font-bold">
               Round {state.round}{state.roundLimit ? `/${state.roundLimit}` : ''}
             </div>
           )}
@@ -193,7 +202,7 @@ export default function GamePage({
 
         {/* LOBBY */}
         {state.phase === "lobby" && (
-          <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
+          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6">
             <h2 className="text-2xl font-bold text-center mb-4">
               {state.isGenerating ? "Generating prompts..." : "Waiting for players..."}
             </h2>
@@ -201,7 +210,7 @@ export default function GamePage({
             {state.isGenerating ? (
               <div className="text-center py-8">
                 <div className="text-4xl mb-4 animate-pulse" role="img" aria-label="Generating">🎲</div>
-                <p className="text-gray-600">AI is cooking up questions about:</p>
+                <p className="text-card-muted">AI is cooking up questions about:</p>
                 <p className="text-purple-600 font-bold text-lg mt-2">{state.theme}</p>
               </div>
             ) : (
@@ -212,18 +221,18 @@ export default function GamePage({
                       key={p.id}
                       className={`p-3 rounded-xl ${
                         p.disconnectedAt
-                          ? "opacity-40 bg-gray-100 italic"
+                          ? "opacity-40 bg-progress-bg italic"
                           : p.isVoyeur
-                          ? "opacity-50 bg-gray-100"
+                          ? "opacity-50 bg-progress-bg"
                           : p.id === myId
-                          ? "bg-purple-100 border-2 border-purple-500"
-                          : "bg-gray-100"
+                          ? "bg-highlight-bg border-2 border-purple-500"
+                          : "bg-progress-bg"
                       }`}
                     >
                       {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
                       {p.name} {streakBadge(p)}
-                      {p.disconnectedAt && <span className="ml-2 text-gray-400" role="img" aria-label="Reconnecting"> ⏳</span>}
-                      {p.isVoyeur && !p.disconnectedAt && <span className="ml-2 text-gray-500" role="img" aria-label="Watching"> 👁️</span>}
+                      {p.disconnectedAt && <span className="ml-2 text-muted-extra" role="img" aria-label="Reconnecting"> ⏳</span>}
+                      {p.isVoyeur && !p.disconnectedAt && <span className="ml-2 text-card-muted" role="img" aria-label="Watching"> 👁️</span>}
                     </li>
                   ))}
                 </ul>
@@ -231,7 +240,7 @@ export default function GamePage({
                 {isHost && (
                   <>
                     <div className="mb-4">
-                      <label htmlFor="theme-input" className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="theme-input" className="block text-sm font-medium text-label-text mb-2">
                         Game Theme (AI will generate questions)
                       </label>
                       <input
@@ -240,12 +249,12 @@ export default function GamePage({
                         placeholder="e.g., The naked truth, Office nightmares, Dating disasters"
                         value={theme}
                         onChange={(e) => setTheme(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-500 focus:border-purple-500 focus:outline-none"
+                        className="w-full px-4 py-3 rounded-xl border-2 border-input-border focus:border-purple-500 focus:outline-none bg-input-bg text-card-text"
                         maxLength={100}
                       />
                     </div>
                     <div className="mb-4">
-                      <span className="block text-sm font-medium text-gray-700 mb-2">Rounds</span>
+                      <span className="block text-sm font-medium text-label-text mb-2">Rounds</span>
                       <div className="flex gap-2" role="group" aria-label="Select number of rounds">
                         {[3, 5, 10].map((num) => (
                           <button
@@ -254,7 +263,7 @@ export default function GamePage({
                             className={`px-4 py-2 rounded-full font-bold transition-colors ${
                               roundLimit === num
                                 ? "bg-purple-600 text-white"
-                                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                                : "bg-card-border text-label-text hover:bg-btn-inactive-hover"
                             }`}
                             aria-pressed={roundLimit === num}
                           >
@@ -266,7 +275,7 @@ export default function GamePage({
                           className={`px-4 py-2 rounded-full font-bold transition-colors ${
                             roundLimit === null
                               ? "bg-purple-600 text-white"
-                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                              : "bg-card-border text-label-text hover:bg-btn-inactive-hover"
                           }`}
                           aria-pressed={roundLimit === null}
                         >
@@ -277,7 +286,7 @@ export default function GamePage({
                   </>
                 )}
 
-                <p className="text-center text-gray-500 mb-4">
+                <p className="text-center text-card-muted mb-4">
                   {activePlayers.length < 2
                     ? `Need at least 2 active players (${activePlayers.length} active${state.players.length > activePlayers.length ? `, ${state.players.length - activePlayers.length} watching` : ""})`
                     : `${activePlayers.length} players ready!${state.players.length > activePlayers.length ? ` (${state.players.length - activePlayers.length} watching)` : ""}`}
@@ -291,7 +300,7 @@ export default function GamePage({
                     START GAME
                   </button>
                 )}
-                {!isHost && <p className="text-center text-gray-500">Waiting for host to start...</p>}
+                {!isHost && <p className="text-center text-card-muted">Waiting for host to start...</p>}
               </>
             )}
           </div>
@@ -299,11 +308,11 @@ export default function GamePage({
 
         {/* PROMPT */}
         {state.phase === "prompt" && (
-          <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-8 text-center">
-            <p className="text-gray-500 mb-4">Round {state.round}</p>
-            <h2 className="text-3xl font-black text-gray-800">{state.currentPrompt}</h2>
+          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-8 text-center">
+            <p className="text-card-muted mb-4">Round {state.round}</p>
+            <h2 className="text-3xl font-black text-card-text">{state.currentPrompt}</h2>
             {state.promptSource && (
-              <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
+              <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-progress-bg text-muted-extra">
                 {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
               </span>
             )}
@@ -312,11 +321,11 @@ export default function GamePage({
 
         {/* WRITING */}
         {state.phase === "writing" && (
-          <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
+          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6">
             <h2 className="text-xl font-bold text-center mb-1">{state.currentPrompt}</h2>
             {state.promptSource && (
               <p className="text-center mb-2">
-                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-progress-bg text-muted-extra">
                   {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
                 </span>
               </p>
@@ -324,7 +333,7 @@ export default function GamePage({
             {isVoyeur ? (
               <div className="text-center py-8" role="status">
                 <div className="text-6xl mb-4" role="img" aria-label="Watching">👁️</div>
-                <p className="text-gray-500">You&apos;re watching. Waiting for players to submit...</p>
+                <p className="text-card-muted">You&apos;re watching. Waiting for players to submit...</p>
                 <button
                   onClick={toggleVoyeur}
                   className="mt-4 px-4 py-2 text-purple-600 font-medium hover:underline"
@@ -340,12 +349,12 @@ export default function GamePage({
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value.slice(0, 100))}
                   placeholder="Type your answer..."
-                  className="w-full p-4 rounded-xl border-2 border-gray-500 focus:border-purple-500 focus:outline-none text-lg resize-none h-32"
+                  className="w-full p-4 rounded-xl border-2 border-input-border focus:border-purple-500 focus:outline-none text-lg resize-none h-32 bg-input-bg text-card-text"
                   maxLength={100}
                   aria-describedby="char-count"
                 />
                 <div className="flex justify-between items-center mt-2">
-                  <span id="char-count" className="text-gray-500" aria-live="polite">{answer.length}/100 characters</span>
+                  <span id="char-count" className="text-card-muted" aria-live="polite">{answer.length}/100 characters</span>
                   <button
                     onClick={submitAnswer}
                     disabled={!answer.trim()}
@@ -358,15 +367,15 @@ export default function GamePage({
             ) : (
               <div className="text-center py-8" role="status">
                 <div className="text-6xl mb-4" role="img" aria-label="Checkmark">✓</div>
-                <p className="text-gray-500">Answer submitted. Waiting for others...</p>
+                <p className="text-card-muted">Answer submitted. Waiting for others...</p>
               </div>
             )}
             {/* Submission progress */}
-            <div className="mt-4 p-3 bg-gray-100 rounded-xl">
-              <p className="text-sm text-gray-600 mb-2">
+            <div className="mt-4 p-3 bg-progress-bg rounded-xl">
+              <p className="text-sm text-card-muted mb-2">
                 Submitted: {state.submittedPlayerIds?.length || 0}/{activePlayers.length}
                 {state.players.length > activePlayers.length && (
-                  <span className="text-gray-400"> ({state.players.length - activePlayers.length} watching)</span>
+                  <span className="text-muted-extra"> ({state.players.length - activePlayers.length} watching)</span>
                 )}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -375,10 +384,10 @@ export default function GamePage({
                     key={p.id}
                     className={`text-xs px-2 py-1 rounded-full ${
                       p.isVoyeur
-                        ? "bg-gray-100 text-gray-400 opacity-50"
+                        ? "bg-progress-bg text-muted-extra opacity-50"
                         : state.submittedPlayerIds?.includes(p.id)
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-200 text-gray-500"
+                        ? "bg-submitted-bg text-submitted-text"
+                        : "bg-card-border text-card-muted"
                     }`}
                   >
                     {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
@@ -392,7 +401,7 @@ export default function GamePage({
             {isHost && (
               <button
                 onClick={endWriting}
-                className="w-full mt-4 py-3 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-700 transition-colors"
+                className="w-full mt-4 py-3 bg-btn-secondary text-white font-bold rounded-xl hover:bg-btn-secondary-hover transition-colors"
               >
                 END WRITING → VOTE
               </button>
@@ -402,11 +411,11 @@ export default function GamePage({
 
         {/* VOTING */}
         {state.phase === "voting" && (
-          <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
+          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6">
             <h2 className="text-xl font-bold text-center mb-1">{state.currentPrompt}</h2>
             {state.promptSource && (
               <p className="text-center mb-3">
-                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-progress-bg text-muted-extra">
                   {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
                 </span>
               </p>
@@ -414,13 +423,13 @@ export default function GamePage({
             {isVoyeur ? (
               <>
                 <div className="text-center py-4 mb-4">
-                  <span className="text-gray-500">👁️ Watching the votes come in...</span>
+                  <span className="text-card-muted">👁️ Watching the votes come in...</span>
                 </div>
                 <div className="space-y-3">
                   {state.answers.map((a) => (
                     <div
                       key={a.answerId}
-                      className="w-full p-4 bg-gray-100 rounded-xl text-left opacity-75"
+                      className="w-full p-4 bg-progress-bg rounded-xl text-left opacity-75"
                     >
                       {a.answer}
                     </div>
@@ -441,27 +450,27 @@ export default function GamePage({
                     <button
                       key={a.answerId}
                       onClick={() => vote(a.answerId)}
-                      className="w-full p-4 bg-gray-100 rounded-xl text-left hover:bg-purple-100 hover:border-purple-500 border-2 border-transparent transition-colors"
+                      className="w-full p-4 bg-progress-bg rounded-xl text-left hover:bg-highlight-bg hover:border-purple-500 border-2 border-transparent transition-colors"
                     >
                       {a.answer}
                     </button>
                   ))}
                 {state.answers.filter((a) => !a.isOwn).length === 0 && (
-                  <p className="text-center text-gray-500">No other answers to vote on</p>
+                  <p className="text-center text-card-muted">No other answers to vote on</p>
                 )}
               </div>
             ) : (
               <div className="text-center py-8" role="status">
                 <div className="text-6xl mb-4" role="img" aria-label="Checkmark">✓</div>
-                <p className="text-gray-500">Vote submitted. Waiting for others...</p>
+                <p className="text-card-muted">Vote submitted. Waiting for others...</p>
               </div>
             )}
             {/* Voting progress */}
-            <div className="mt-4 p-3 bg-gray-100 rounded-xl">
-              <p className="text-sm text-gray-600 mb-2">
+            <div className="mt-4 p-3 bg-progress-bg rounded-xl">
+              <p className="text-sm text-card-muted mb-2">
                 Voted: {state.votedPlayerIds?.length || 0}/{activePlayers.length}
                 {state.players.length > activePlayers.length && (
-                  <span className="text-gray-400"> ({state.players.length - activePlayers.length} watching)</span>
+                  <span className="text-muted-extra"> ({state.players.length - activePlayers.length} watching)</span>
                 )}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -470,10 +479,10 @@ export default function GamePage({
                     key={p.id}
                     className={`text-xs px-2 py-1 rounded-full ${
                       p.isVoyeur
-                        ? "bg-gray-100 text-gray-400 opacity-50"
+                        ? "bg-progress-bg text-muted-extra opacity-50"
                         : state.votedPlayerIds?.includes(p.id)
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-200 text-gray-500"
+                        ? "bg-submitted-bg text-submitted-text"
+                        : "bg-card-border text-card-muted"
                     }`}
                   >
                     {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
@@ -487,7 +496,7 @@ export default function GamePage({
             {isHost && (
               <button
                 onClick={endVoting}
-                className="w-full mt-4 py-3 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-700 transition-colors"
+                className="w-full mt-4 py-3 bg-btn-secondary text-white font-bold rounded-xl hover:bg-btn-secondary-hover transition-colors"
               >
                 END VOTING → RESULTS
               </button>
@@ -497,7 +506,7 @@ export default function GamePage({
 
         {/* REVEAL */}
         {state.phase === "reveal" && (
-          <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
+          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6">
             <h2 className="text-xl font-bold text-center mb-4">Results</h2>
             <div className="space-y-3">
               {state.answers
@@ -508,10 +517,10 @@ export default function GamePage({
                   return (
                     <div
                       key={i}
-                      className={`p-4 rounded-xl ${isWinner ? "bg-yellow-100 border-2 border-yellow-400" : "bg-gray-100"}`}
+                      className={`p-4 rounded-xl ${isWinner ? "bg-winner-bg border-2 border-winner-border" : "bg-progress-bg"}`}
                     >
                       <div className="font-bold text-lg">{a.answer}</div>
-                      <div className="flex justify-between text-sm text-gray-600 mt-1">
+                      <div className="flex justify-between text-sm text-card-muted mt-1">
                         <span>- {player?.name} {player && streakBadge(player)}</span>
                         <span>
                           {a.votes} vote{a.votes !== 1 ? "s" : ""}{" "}
@@ -536,7 +545,7 @@ export default function GamePage({
 
         {/* FINAL */}
         {state.phase === "final" && (
-          <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
+          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6">
             <h2 className="text-3xl font-black text-center mb-6">
               {sortedPlayers[0]?.name} WINS!
             </h2>
@@ -546,10 +555,10 @@ export default function GamePage({
                   key={p.id}
                   className={`p-3 rounded-xl flex justify-between ${
                     p.isVoyeur
-                      ? "bg-gray-100 opacity-50"
+                      ? "bg-progress-bg opacity-50"
                       : i === 0
-                      ? "bg-yellow-100 border-2 border-yellow-400"
-                      : "bg-gray-100"
+                      ? "bg-winner-bg border-2 border-winner-border"
+                      : "bg-progress-bg"
                   }`}
                 >
                   <span>
@@ -575,7 +584,7 @@ export default function GamePage({
 
         {/* Scoreboard (during game) */}
         {["writing", "voting", "reveal"].includes(state.phase) && (
-          <div className="mt-4 bg-black/50 backdrop-blur rounded-2xl p-4">
+          <div className="mt-4 bg-accent-bg backdrop-blur rounded-2xl p-4">
             <h3 className="text-white font-bold mb-2">Scores</h3>
             <div className="grid grid-cols-2 gap-2 text-sm text-white">
               {sortedPlayers.map((p) => (

@@ -277,6 +277,7 @@ interface Player {
   score: number;
   answer?: string;
   vote?: string;
+  isVoyeur?: boolean;
 }
 
 interface RoundHistory {
@@ -306,6 +307,11 @@ export default class PsychServer implements Party.Server {
     this.state = this.initialState();
   }
 
+  // Get players who are not in voyeur mode (active participants)
+  getActivePlayers(): Player[] {
+    return Object.values(this.state.players).filter(p => !p.isVoyeur);
+  }
+
   initialState(): GameState {
     return {
       phase: PHASES.LOBBY,
@@ -328,6 +334,16 @@ export default class PsychServer implements Party.Server {
   }
 
   sendState() {
+    const activePlayers = this.getActivePlayers();
+    const activePlayerIds = new Set(activePlayers.map(p => p.id));
+
+    // Filter submitted/voted to only include currently active players
+    // (excludes players who submitted then became voyeurs)
+    const activeSubmittedPlayerIds = Object.keys(this.state.answers)
+      .filter(id => activePlayerIds.has(id));
+    const activeVotedPlayerIds = Object.keys(this.state.votes)
+      .filter(id => activePlayerIds.has(id));
+
     // Base state shared by all clients
     const baseState = {
       type: "state",
@@ -338,8 +354,8 @@ export default class PsychServer implements Party.Server {
       currentPrompt: this.state.currentPrompt,
       theme: this.state.theme,
       isGenerating: this.state.isGenerating,
-      submittedPlayerIds: Object.keys(this.state.answers),
-      votedPlayerIds: Object.keys(this.state.votes),
+      submittedPlayerIds: activeSubmittedPlayerIds,
+      votedPlayerIds: activeVotedPlayerIds,
     };
 
     // During VOTING, send personalized state to each connection (to mark own answer)
@@ -439,8 +455,8 @@ export default class PsychServer implements Party.Server {
 
     // Build round history - capture top answers (50%+ of votes)
     // SECURITY: Sanitize answers to prevent prompt injection
-    const playerCount = Object.keys(this.state.players).length;
-    const voteThreshold = playerCount * 0.5;
+    const activePlayerCount = this.getActivePlayers().length;
+    const voteThreshold = activePlayerCount * 0.5;
     const topAnswers = Object.entries(voteCounts)
       .filter(([, votes]) => votes >= voteThreshold)
       .map(([playerId]) => sanitizeForLLM(this.state.answers[playerId] || ""))
@@ -487,10 +503,16 @@ export default class PsychServer implements Party.Server {
       const wasHost = this.state.hostId === conn.id;
       delete this.state.players[conn.id];
 
-      // Transfer host to another player if the host left
+      // Transfer host to another player if the host left (prefer active players)
       if (wasHost) {
-        const remainingPlayerIds = Object.keys(this.state.players);
-        this.state.hostId = remainingPlayerIds.length > 0 ? remainingPlayerIds[0] : null;
+        const activePlayers = this.getActivePlayers();
+        if (activePlayers.length > 0) {
+          this.state.hostId = activePlayers[0].id;
+        } else {
+          // Fall back to any remaining player (even voyeurs)
+          const remainingPlayerIds = Object.keys(this.state.players);
+          this.state.hostId = remainingPlayerIds.length > 0 ? remainingPlayerIds[0] : null;
+        }
       }
 
       this.sendState();
@@ -537,7 +559,7 @@ export default class PsychServer implements Party.Server {
           if (
             sender.id === this.state.hostId &&
             this.state.phase === PHASES.LOBBY &&
-            Object.keys(this.state.players).length >= 2 &&
+            this.getActivePlayers().length >= 2 &&
             !this.state.isGenerating
           ) {
             const theme = (data.theme || "random funny questions").slice(0, 100);
@@ -560,9 +582,11 @@ export default class PsychServer implements Party.Server {
 
         case "answer": {
           const trimmedAnswer = (data.answer || "").trim().slice(0, 100);
+          const player = this.state.players[sender.id];
           if (
             this.state.phase === PHASES.WRITING &&
-            this.state.players[sender.id] &&
+            player &&
+            !player.isVoyeur &&
             !this.state.answers[sender.id] &&
             trimmedAnswer.length > 0
           ) {
@@ -575,9 +599,11 @@ export default class PsychServer implements Party.Server {
         case "vote": {
           // Translate answerId to playerId
           const votedForPlayerId = this.state.answerOrder[data.votedFor];
+          const player = this.state.players[sender.id];
           if (
             this.state.phase === PHASES.VOTING &&
-            this.state.players[sender.id] &&
+            player &&
+            !player.isVoyeur &&
             !this.state.votes[sender.id] &&
             votedForPlayerId !== sender.id &&
             this.state.answers[votedForPlayerId]
@@ -629,6 +655,37 @@ export default class PsychServer implements Party.Server {
             this.state.votes = {};
             this.state.roundHistory = [];
             this.state.nextPrompt = null;
+            this.sendState();
+          }
+          break;
+        }
+
+        case "toggle-voyeur": {
+          const player = this.state.players[sender.id];
+          if (player) {
+            // If trying to become voyeur, check if this would leave 0 active players mid-game
+            if (!player.isVoyeur) {
+              const activePlayersExcludingSelf = this.getActivePlayers()
+                .filter(p => p.id !== sender.id);
+              const isGameInProgress = this.state.phase !== PHASES.LOBBY &&
+                                        this.state.phase !== PHASES.FINAL;
+
+              // Don't allow last active player to become voyeur during active game
+              if (isGameInProgress && activePlayersExcludingSelf.length === 0) {
+                return; // Silently reject - client will stay in sync on next state
+              }
+            }
+
+            player.isVoyeur = !player.isVoyeur;
+
+            // Auto-transfer host if becoming voyeur
+            if (player.isVoyeur && this.state.hostId === sender.id) {
+              const newHost = this.getActivePlayers().find(p => p.id !== sender.id);
+              if (newHost) {
+                this.state.hostId = newHost.id;
+              }
+            }
+
             this.sendState();
           }
           break;

@@ -7,6 +7,7 @@ interface Player {
   id: string;
   name: string;
   score: number;
+  isVoyeur?: boolean;
 }
 
 interface Answer {
@@ -99,6 +100,7 @@ export default function GamePage({
   const endWriting = () => send({ type: "end-writing" });
   const endVoting = () => send({ type: "end-voting" });
   const nextRound = () => send({ type: "next-round" });
+  const toggleVoyeur = () => send({ type: "toggle-voyeur" });
   const submitAnswer = () => {
     if (answer.trim()) {
       send({ type: "answer", answer: answer.trim() });
@@ -120,6 +122,9 @@ export default function GamePage({
   }
 
   const isHost = myId === state.hostId;
+  const myPlayer = state.players.find(p => p.id === myId);
+  const isVoyeur = myPlayer?.isVoyeur ?? false;
+  const activePlayers = state.players.filter(p => !p.isVoyeur);
   const sortedPlayers = [...state.players].sort((a, b) => b.score - a.score);
 
   const copyLink = () => {
@@ -153,6 +158,18 @@ export default function GamePage({
             >
               {copied ? "Copied!" : "Copy Link"}
             </button>
+            <button
+              onClick={toggleVoyeur}
+              className={`backdrop-blur px-3 py-2 rounded-full font-bold transition-colors ${
+                isVoyeur
+                  ? "bg-purple-600 text-white hover:bg-purple-700"
+                  : "bg-black/50 text-white hover:bg-black/70"
+              }`}
+              aria-label={isVoyeur ? "Rejoin as player" : "Switch to watching mode"}
+              aria-pressed={isVoyeur}
+            >
+              {isVoyeur ? "👁️ Watching" : "👁️"}
+            </button>
           </div>
           {state.round > 0 && (
             <div className="bg-black/50 backdrop-blur px-4 py-2 rounded-full text-white font-bold">
@@ -180,9 +197,17 @@ export default function GamePage({
                   {state.players.map((p) => (
                     <li
                       key={p.id}
-                      className={`p-3 rounded-xl ${p.id === myId ? "bg-purple-100 border-2 border-purple-500" : "bg-gray-100"}`}
+                      className={`p-3 rounded-xl ${
+                        p.isVoyeur
+                          ? "opacity-50 bg-gray-100"
+                          : p.id === myId
+                          ? "bg-purple-100 border-2 border-purple-500"
+                          : "bg-gray-100"
+                      }`}
                     >
-                      {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}{p.name}
+                      {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
+                      {p.name}
+                      {p.isVoyeur && <span className="ml-2 text-gray-500" role="img" aria-label="Watching"> 👁️</span>}
                     </li>
                   ))}
                 </ul>
@@ -205,12 +230,12 @@ export default function GamePage({
                 )}
 
                 <p className="text-center text-gray-500 mb-4">
-                  {state.players.length < 2
-                    ? `Need at least 2 players (${state.players.length}/8)`
-                    : `${state.players.length} players ready!`}
+                  {activePlayers.length < 2
+                    ? `Need at least 2 active players (${activePlayers.length} active${state.players.length > activePlayers.length ? `, ${state.players.length - activePlayers.length} watching` : ""})`
+                    : `${activePlayers.length} players ready!${state.players.length > activePlayers.length ? ` (${state.players.length - activePlayers.length} watching)` : ""}`}
                 </p>
 
-                {isHost && state.players.length >= 2 && (
+                {isHost && activePlayers.length >= 2 && (
                   <button
                     onClick={startGame}
                     className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white text-xl font-bold rounded-xl hover:scale-105 transition-transform"
@@ -236,7 +261,18 @@ export default function GamePage({
         {state.phase === "writing" && (
           <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
             <h2 className="text-xl font-bold text-center mb-2">{state.currentPrompt}</h2>
-            {!hasSubmitted ? (
+            {isVoyeur ? (
+              <div className="text-center py-8" role="status">
+                <div className="text-6xl mb-4" role="img" aria-label="Watching">👁️</div>
+                <p className="text-gray-500">You&apos;re watching. Waiting for players to submit...</p>
+                <button
+                  onClick={toggleVoyeur}
+                  className="mt-4 px-4 py-2 text-purple-600 font-medium hover:underline"
+                >
+                  Rejoin as player
+                </button>
+              </div>
+            ) : !hasSubmitted ? (
               <>
                 <label htmlFor="answer-input" className="sr-only">Your answer</label>
                 <textarea
@@ -268,19 +304,27 @@ export default function GamePage({
             {/* Submission progress */}
             <div className="mt-4 p-3 bg-gray-100 rounded-xl">
               <p className="text-sm text-gray-600 mb-2">
-                Submitted: {state.submittedPlayerIds?.length || 0}/{state.players.length}
+                Submitted: {state.submittedPlayerIds?.length || 0}/{activePlayers.length}
+                {state.players.length > activePlayers.length && (
+                  <span className="text-gray-400"> ({state.players.length - activePlayers.length} watching)</span>
+                )}
               </p>
               <div className="flex flex-wrap gap-2">
                 {state.players.map((p) => (
                   <span
                     key={p.id}
                     className={`text-xs px-2 py-1 rounded-full ${
-                      state.submittedPlayerIds?.includes(p.id)
+                      p.isVoyeur
+                        ? "bg-gray-100 text-gray-400 opacity-50"
+                        : state.submittedPlayerIds?.includes(p.id)
                         ? "bg-green-100 text-green-700"
                         : "bg-gray-200 text-gray-500"
                     }`}
                   >
-                    {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}{p.name} {state.submittedPlayerIds?.includes(p.id) && <span role="img" aria-label="Submitted">✓</span>}
+                    {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
+                    {p.name}
+                    {p.isVoyeur && <span role="img" aria-label="Watching"> 👁️</span>}
+                    {!p.isVoyeur && state.submittedPlayerIds?.includes(p.id) && <span role="img" aria-label="Submitted"> ✓</span>}
                   </span>
                 ))}
               </div>
@@ -300,7 +344,29 @@ export default function GamePage({
         {state.phase === "voting" && (
           <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6">
             <h2 className="text-xl font-bold text-center mb-4">{state.currentPrompt}</h2>
-            {!hasVoted ? (
+            {isVoyeur ? (
+              <>
+                <div className="text-center py-4 mb-4">
+                  <span className="text-gray-500">👁️ Watching the votes come in...</span>
+                </div>
+                <div className="space-y-3">
+                  {state.answers.map((a) => (
+                    <div
+                      key={a.answerId}
+                      className="w-full p-4 bg-gray-100 rounded-xl text-left opacity-75"
+                    >
+                      {a.answer}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={toggleVoyeur}
+                  className="w-full mt-4 py-2 text-purple-600 font-medium hover:underline"
+                >
+                  Rejoin as player
+                </button>
+              </>
+            ) : !hasVoted ? (
               <div className="space-y-3">
                 {state.answers
                   .filter((a) => !a.isOwn)
@@ -326,19 +392,27 @@ export default function GamePage({
             {/* Voting progress */}
             <div className="mt-4 p-3 bg-gray-100 rounded-xl">
               <p className="text-sm text-gray-600 mb-2">
-                Voted: {state.votedPlayerIds?.length || 0}/{state.players.length}
+                Voted: {state.votedPlayerIds?.length || 0}/{activePlayers.length}
+                {state.players.length > activePlayers.length && (
+                  <span className="text-gray-400"> ({state.players.length - activePlayers.length} watching)</span>
+                )}
               </p>
               <div className="flex flex-wrap gap-2">
                 {state.players.map((p) => (
                   <span
                     key={p.id}
                     className={`text-xs px-2 py-1 rounded-full ${
-                      state.votedPlayerIds?.includes(p.id)
+                      p.isVoyeur
+                        ? "bg-gray-100 text-gray-400 opacity-50"
+                        : state.votedPlayerIds?.includes(p.id)
                         ? "bg-green-100 text-green-700"
                         : "bg-gray-200 text-gray-500"
                     }`}
                   >
-                    {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}{p.name} {state.votedPlayerIds?.includes(p.id) && <span role="img" aria-label="Voted">✓</span>}
+                    {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
+                    {p.name}
+                    {p.isVoyeur && <span role="img" aria-label="Watching"> 👁️</span>}
+                    {!p.isVoyeur && state.votedPlayerIds?.includes(p.id) && <span role="img" aria-label="Voted"> ✓</span>}
                   </span>
                 ))}
               </div>
@@ -403,10 +477,19 @@ export default function GamePage({
               {sortedPlayers.map((p, i) => (
                 <div
                   key={p.id}
-                  className={`p-3 rounded-xl flex justify-between ${i === 0 ? "bg-yellow-100 border-2 border-yellow-400" : "bg-gray-100"}`}
+                  className={`p-3 rounded-xl flex justify-between ${
+                    p.isVoyeur
+                      ? "bg-gray-100 opacity-50"
+                      : i === 0
+                      ? "bg-yellow-100 border-2 border-yellow-400"
+                      : "bg-gray-100"
+                  }`}
                 >
                   <span>
-                    {i === 0 && <span role="img" aria-label="Winner">🏆 </span>}{p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}{p.name}
+                    {i === 0 && !p.isVoyeur && <span role="img" aria-label="Winner">🏆 </span>}
+                    {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
+                    {p.name}
+                    {p.isVoyeur && <span role="img" aria-label="Watching"> 👁️</span>}
                   </span>
                   <span className="font-bold">{p.score} pts</span>
                 </div>
@@ -429,8 +512,12 @@ export default function GamePage({
             <h3 className="text-white font-bold mb-2">Scores</h3>
             <div className="grid grid-cols-2 gap-2 text-sm text-white">
               {sortedPlayers.map((p) => (
-                <div key={p.id} className="flex justify-between">
-                  <span>{p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}{p.name}</span>
+                <div key={p.id} className={`flex justify-between ${p.isVoyeur ? "opacity-50" : ""}`}>
+                  <span>
+                    {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
+                    {p.name}
+                    {p.isVoyeur && <span role="img" aria-label="Watching"> 👁️</span>}
+                  </span>
                   <span>{p.score}</span>
                 </div>
               ))}

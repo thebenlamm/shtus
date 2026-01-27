@@ -21,6 +21,15 @@ interface Answer {
   isOwn?: boolean; // Only present in VOTING phase
 }
 
+interface ChatMessage {
+  id: string;
+  playerId: string;
+  playerName: string;
+  text: string;
+  timestamp: number;
+  type: "chat" | "system";
+}
+
 interface GameState {
   phase: string;
   round: number;
@@ -57,6 +66,12 @@ export default function GamePage({
   const socketRef = useRef<PartySocket | null>(null);
   const { theme: colorTheme, toggleTheme } = useTheme();
 
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isChatOpen, setIsChatOpen] = useState(false); // For mobile drawer
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     // Generate or retrieve stable userId for session persistence across refreshes
     const storageKey = `psych-user-${roomId}`;
@@ -83,6 +98,21 @@ export default function GamePage({
       const data = JSON.parse(e.data);
       if (data.type === "state") {
         setState(data);
+      } else if (data.type === "chat_history") {
+        // Deduplicate by ID in case of reconnection
+        setChatMessages(prev => {
+          const existingIds = new Set(prev.map(m => m.id));
+          const newMessages = data.messages.filter((m: ChatMessage) => !existingIds.has(m.id));
+          return [...prev, ...newMessages].sort((a, b) => a.timestamp - b.timestamp);
+        });
+      } else if (data.type === "chat_message") {
+        setChatMessages(prev => {
+          // Deduplicate
+          if (prev.some(m => m.id === data.message.id)) {
+            return prev;
+          }
+          return [...prev, data.message];
+        });
       }
     };
 
@@ -101,6 +131,27 @@ export default function GamePage({
 
   const send = (data: object) => {
     socketRef.current?.send(JSON.stringify(data));
+  };
+
+  // Auto-scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
+
+  const sendChat = () => {
+    if (chatInput.trim()) {
+      send({ type: "chat", text: chatInput.trim() });
+      setChatInput("");
+    }
+  };
+
+  const handleChatKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendChat();
+    }
   };
 
   const startGame = () => send({ type: "start", theme: theme || "random funny questions", roundLimit });
@@ -149,6 +200,86 @@ export default function GamePage({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Render compact scoreboard for header
+  const renderCompactScoreboard = () => {
+    if (!["writing", "voting", "reveal"].includes(state.phase)) return null;
+    return (
+      <div className="flex flex-wrap gap-2 text-sm">
+        {sortedPlayers.slice(0, 6).map((p, i) => (
+          <span
+            key={p.id}
+            className={`px-2 py-1 rounded-full ${
+              p.isVoyeur ? "opacity-50" : ""
+            } ${i === 0 ? "bg-winner-bg text-card-text" : "bg-accent-bg text-white"}`}
+          >
+            {p.id === state.hostId && "👑 "}
+            {p.name}: {p.score}
+            {p.winStreak >= 2 && <span className="text-orange-400"> 🔥{p.winStreak}</span>}
+          </span>
+        ))}
+        {sortedPlayers.length > 6 && (
+          <span className="px-2 py-1 text-white/70">+{sortedPlayers.length - 6} more</span>
+        )}
+      </div>
+    );
+  };
+
+  // Render chat panel
+  const renderChatPanel = () => (
+    <div className="flex flex-col h-full bg-card-bg backdrop-blur rounded-2xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-card-border">
+        <h3 className="font-bold text-card-text">Chat</h3>
+      </div>
+      <div
+        ref={chatContainerRef}
+        className="flex-1 overflow-y-auto p-4 space-y-2"
+        style={{ minHeight: 0 }}
+      >
+        {chatMessages.length === 0 ? (
+          <p className="text-card-muted text-sm text-center">No messages yet</p>
+        ) : (
+          chatMessages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`text-sm ${msg.type === "system" ? "text-card-muted italic text-center" : ""}`}
+            >
+              {msg.type === "chat" ? (
+                <>
+                  <span className="font-bold text-purple-600">{msg.playerName}:</span>{" "}
+                  <span className="text-card-text">{msg.text}</span>
+                </>
+              ) : (
+                <span>{msg.text}</span>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+      <div className="p-3 border-t border-card-border">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value.slice(0, 150))}
+            onKeyDown={handleChatKeyDown}
+            placeholder="Type a message..."
+            className="flex-1 px-3 py-2 rounded-lg border border-input-border bg-input-bg text-card-text text-sm focus:border-purple-500 focus:outline-none"
+            maxLength={150}
+          />
+          <button
+            onClick={sendChat}
+            disabled={!chatInput.trim()}
+            className="px-3 py-2 bg-purple-600 text-white rounded-lg disabled:opacity-50 hover:bg-purple-700 transition-colors"
+            aria-label="Send message"
+          >
+            →
+          </button>
+        </div>
+        <div className="text-xs text-card-muted mt-1 text-right">{chatInput.length}/150</div>
+      </div>
+    </div>
+  );
+
   return (
     <main id="main" className="min-h-screen bg-gradient-to-br from-gradient-from via-gradient-via to-gradient-to p-4">
       <h1 className="sr-only">Psych! Game Room {roomId}</h1>
@@ -159,9 +290,40 @@ export default function GamePage({
         {state.phase === "reveal" && "Results are in."}
         {state.phase === "final" && `Game over. ${sortedPlayers[0]?.name} wins!`}
       </div>
-      <div className="max-w-lg mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-4">
+
+      {/* Mobile chat drawer */}
+      {isChatOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setIsChatOpen(false)} />
+          <div className="absolute right-0 top-0 bottom-0 w-80 max-w-full">
+            <div className="h-full flex flex-col">
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-accent-bg text-white"
+                aria-label="Close chat"
+              >
+                ×
+              </button>
+              {renderChatPanel()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile chat floating button */}
+      <button
+        onClick={() => setIsChatOpen(true)}
+        className="fixed bottom-4 right-4 z-40 lg:hidden w-14 h-14 rounded-full bg-purple-600 text-white shadow-lg flex items-center justify-center hover:bg-purple-700 transition-colors"
+        aria-label="Open chat"
+      >
+        💬
+      </button>
+
+      <div className="max-w-6xl mx-auto flex gap-4">
+        {/* Game area */}
+        <div className="flex-1 max-w-lg mx-auto lg:mx-0">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2">
             <div className="bg-accent-bg backdrop-blur px-4 py-2 rounded-full text-white font-bold">
               Room: {roomId}
@@ -582,24 +744,18 @@ export default function GamePage({
           </div>
         )}
 
-        {/* Scoreboard (during game) */}
-        {["writing", "voting", "reveal"].includes(state.phase) && (
-          <div className="mt-4 bg-accent-bg backdrop-blur rounded-2xl p-4">
-            <h3 className="text-white font-bold mb-2">Scores</h3>
-            <div className="grid grid-cols-2 gap-2 text-sm text-white">
-              {sortedPlayers.map((p) => (
-                <div key={p.id} className={`flex justify-between ${p.isVoyeur ? "opacity-50" : ""}`}>
-                  <span>
-                    {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
-                    {p.name} {streakBadge(p)}
-                    {p.isVoyeur && <span role="img" aria-label="Watching"> 👁️</span>}
-                  </span>
-                  <span>{p.score}</span>
-                </div>
-              ))}
+        {/* Compact Scoreboard (during game) */}
+          {["writing", "voting", "reveal"].includes(state.phase) && (
+            <div className="mt-4 bg-accent-bg backdrop-blur rounded-2xl p-3">
+              {renderCompactScoreboard()}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Chat sidebar (desktop only) */}
+        <div className="hidden lg:block w-80 h-[calc(100vh-2rem)] sticky top-4">
+          {renderChatPanel()}
+        </div>
       </div>
     </main>
   );

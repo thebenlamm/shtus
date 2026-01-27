@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, use } from "react";
 import PartySocket from "partysocket";
 import { useTheme } from "@/hooks/useTheme";
+import AdminPanel from "@/components/AdminPanel";
 
 interface Player {
   id: string;
@@ -11,6 +12,13 @@ interface Player {
   winStreak: number;
   disconnectedAt?: number;
   isVoyeur?: boolean;
+  // Note: isAdmin is NOT included here - it's not broadcast for security
+  // Admin status is tracked separately via admin-state messages
+}
+
+interface AdminState {
+  exactQuestion: string | null;
+  promptGuidance: string | null;
 }
 
 interface Answer {
@@ -37,7 +45,7 @@ interface GameState {
   players: Player[];
   hostId: string | null;
   currentPrompt: string;
-  promptSource: "ai" | "fallback" | null;
+  promptSource: "ai" | "fallback" | "admin" | null;
   theme: string;
   isGenerating: boolean;
   answers: Answer[];
@@ -51,10 +59,10 @@ export default function GamePage({
   searchParams,
 }: {
   params: Promise<{ roomId: string }>;
-  searchParams: Promise<{ name?: string }>;
+  searchParams: Promise<{ name?: string; admin?: string }>;
 }) {
   const { roomId } = use(params);
-  const { name } = use(searchParams);
+  const { name, admin: adminParam } = use(searchParams);
   const [state, setState] = useState<GameState | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
@@ -71,6 +79,14 @@ export default function GamePage({
   const [chatInput, setChatInput] = useState("");
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  // Admin state
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminState, setAdminState] = useState<AdminState>({
+    exactQuestion: null,
+    promptGuidance: null,
+  });
+  const [showMobileAdmin, setShowMobileAdmin] = useState(false);
+
   useEffect(() => {
     // Generate or retrieve stable userId for session persistence across refreshes
     const storageKey = `psych-user-${roomId}`;
@@ -78,6 +94,18 @@ export default function GamePage({
     if (!userId) {
       userId = crypto.randomUUID();
       localStorage.setItem(storageKey, userId);
+    }
+
+    // Handle admin key: store from URL param or retrieve from localStorage
+    const adminStorageKey = `psych-admin-${roomId}`;
+    let adminKey: string | null = null;
+    if (adminParam) {
+      // New admin key from URL - store it
+      localStorage.setItem(adminStorageKey, adminParam);
+      adminKey = adminParam;
+    } else {
+      // Check if we have a stored admin key (for reconnection)
+      adminKey = localStorage.getItem(adminStorageKey);
     }
 
     const socket = new PartySocket({
@@ -90,13 +118,33 @@ export default function GamePage({
 
     socket.onopen = () => {
       setMyId(socket.id);
-      socket.send(JSON.stringify({ type: "join", name: name || "Player" }));
+      // Reset admin status on new connection - will be set if we receive admin-state
+      setIsAdmin(false);
+      setAdminState({ exactQuestion: null, promptGuidance: null });
+      // Include admin key in join message if we have one
+      const joinMessage: { type: string; name: string; adminKey?: string } = {
+        type: "join",
+        name: name || "Player",
+      };
+      if (adminKey) {
+        joinMessage.adminKey = adminKey;
+      }
+      socket.send(JSON.stringify(joinMessage));
     };
 
     socket.onmessage = (e) => {
       const data = JSON.parse(e.data);
       if (data.type === "state") {
         setState(data);
+        // Note: isAdmin is NOT broadcast in player state for security
+        // Admin status is determined by receiving admin-state messages
+      } else if (data.type === "admin-state") {
+        // Receiving admin-state means we are an admin (server only sends to validated admins)
+        setIsAdmin(true);
+        setAdminState({
+          exactQuestion: data.exactQuestion,
+          promptGuidance: data.promptGuidance,
+        });
       } else if (data.type === "chat_history") {
         // Deduplicate by ID in case of reconnection
         setChatMessages(prev => {
@@ -117,14 +165,16 @@ export default function GamePage({
     };
 
     return () => socket.close();
-  }, [roomId, name]);
+  }, [roomId, name, adminParam]);
 
   useEffect(() => {
     if (state?.phase === "writing") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHasSubmitted(false);
       setAnswer("");
     }
     if (state?.phase === "voting") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHasVoted(false);
     }
   }, [state?.phase, state?.round]);
@@ -170,6 +220,9 @@ export default function GamePage({
     setHasVoted(true);
   };
   const restart = () => send({ type: "restart" });
+  const setAdminOverride = (data: { exactQuestion?: string | null; promptGuidance?: string | null }) => {
+    send({ type: "admin-set-override", ...data });
+  };
 
   if (!state) {
     return (
@@ -447,7 +500,7 @@ export default function GamePage({
             <h2 className="text-3xl font-black text-card-text">{state.currentPrompt}</h2>
             {state.promptSource && (
               <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-progress-bg text-muted-extra">
-                {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
+                {state.promptSource === "ai" ? "🤖 grok" : state.promptSource === "admin" ? "👑 host" : "📦 classic"}
               </span>
             )}
           </div>
@@ -460,7 +513,7 @@ export default function GamePage({
             {state.promptSource && (
               <p className="text-center mb-2">
                 <span className="text-xs px-2 py-0.5 rounded-full bg-progress-bg text-muted-extra">
-                  {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
+                  {state.promptSource === "ai" ? "🤖 grok" : state.promptSource === "admin" ? "👑 host" : "📦 classic"}
                 </span>
               </p>
             )}
@@ -550,7 +603,7 @@ export default function GamePage({
             {state.promptSource && (
               <p className="text-center mb-3">
                 <span className="text-xs px-2 py-0.5 rounded-full bg-progress-bg text-muted-extra">
-                  {state.promptSource === "ai" ? "🤖 grok" : "📦 classic"}
+                  {state.promptSource === "ai" ? "🤖 grok" : state.promptSource === "admin" ? "👑 host" : "📦 classic"}
                 </span>
               </p>
             )}
@@ -723,6 +776,57 @@ export default function GamePage({
             </div>
           )}
         </div>
+
+        {/* Admin sidebar (desktop only) - positioned on left edge */}
+        {isAdmin && (
+          <div className="hidden lg:block fixed left-4 top-4 w-72 h-[calc(100vh-2rem)]">
+            <AdminPanel
+              exactQuestion={adminState.exactQuestion}
+              promptGuidance={adminState.promptGuidance}
+              onSetOverride={setAdminOverride}
+            />
+          </div>
+        )}
+
+        {/* Mobile admin button and drawer */}
+        {isAdmin && (
+          <>
+            {/* Floating button (mobile only) */}
+            <button
+              onClick={() => setShowMobileAdmin(true)}
+              className="lg:hidden fixed left-4 bottom-4 z-40 bg-purple-600 text-white px-4 py-3 rounded-full font-bold shadow-lg hover:bg-purple-700 transition-colors"
+              aria-label="Open admin controls"
+            >
+              Admin
+            </button>
+
+            {/* Drawer overlay (mobile only) */}
+            {showMobileAdmin && (
+              <div className="lg:hidden fixed inset-0 z-50 flex">
+                {/* Backdrop */}
+                <div
+                  className="absolute inset-0 bg-black/50"
+                  onClick={() => setShowMobileAdmin(false)}
+                />
+                {/* Drawer */}
+                <div className="relative w-80 max-w-[85vw] h-full bg-card-bg shadow-xl">
+                  <button
+                    onClick={() => setShowMobileAdmin(false)}
+                    className="absolute top-4 right-4 z-10 text-card-muted hover:text-card-text text-2xl"
+                    aria-label="Close admin panel"
+                  >
+                    x
+                  </button>
+                  <AdminPanel
+                    exactQuestion={adminState.exactQuestion}
+                    promptGuidance={adminState.promptGuidance}
+                    onSetOverride={setAdminOverride}
+                  />
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         {/* Chat sidebar (desktop only) - positioned on right edge */}
         <div className="hidden lg:block fixed right-4 top-4 w-80 h-[calc(100vh-2rem)]">

@@ -7,8 +7,8 @@ export class MockConnection implements Party.Connection {
   messages: string[] = [];
   closed: boolean = false;
 
-  // Party.Connection interface
-  socket: WebSocket | null = null;
+  // Party.Connection interface (cast to satisfy type, not actually used in tests)
+  socket: WebSocket = null as unknown as WebSocket;
   state: unknown = undefined;
   setState(state: unknown) { this.state = state; }
 

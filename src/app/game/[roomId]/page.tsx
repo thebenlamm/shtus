@@ -6,6 +6,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { useIsMobile, getInitialIsMobile } from "@/hooks/useIsMobile";
 import AdminPanel from "@/components/AdminPanel";
 
+const CHAT_ENABLED = process.env.NEXT_PUBLIC_CHAT_ENABLED === "true";
+
 interface Player {
   id: string;
   name: string;
@@ -445,7 +447,7 @@ export default function GamePage({
         {state.phase === "final" && `Game over. ${sortedPlayers[0]?.name} wins!`}
       </div>
 
-      <div className="max-w-6xl mx-auto relative lg:pr-96">
+      <div className={`max-w-6xl mx-auto relative ${CHAT_ENABLED ? 'lg:pr-96' : ''}`}>
         {/* Game area - centered (pr-96 on lg accounts for fixed chat sidebar) */}
         <div className="max-w-lg mx-auto">
           {/* Header */}
@@ -939,59 +941,61 @@ export default function GamePage({
         )}
 
         {/* Chat - render only one panel at a time to avoid shared ref issues */}
-        {isMobile ? (
-          <>
-            {/* Floating button (mobile) */}
-            <button
-              onClick={() => {
-                setShowMobileChat(true);
-                setShowMobileAdmin(false); // Mutual exclusion
-                setUnreadChatCount(0);
-              }}
-              className="fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40 bg-purple-600 text-white px-4 py-3 rounded-full font-bold shadow-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
-              aria-label={`Open chat${unreadChatCount > 0 ? `, ${unreadChatCount > 99 ? "99+" : unreadChatCount} unread messages` : ""}`}
-            >
-              Chat
-              {unreadChatCount > 0 && (
-                <span className="bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[1.25rem] text-center">
-                  {unreadChatCount > 99 ? "99+" : unreadChatCount}
-                </span>
-              )}
-            </button>
-
-            {/* Drawer overlay (mobile) */}
-            {showMobileChat && (
-              <div
-                className="fixed inset-0 z-50 flex justify-end"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Chat"
-                onKeyDown={handleFocusTrap}
+        {CHAT_ENABLED && (
+          isMobile ? (
+            <>
+              {/* Floating button (mobile) */}
+              <button
+                onClick={() => {
+                  setShowMobileChat(true);
+                  setShowMobileAdmin(false); // Mutual exclusion
+                  setUnreadChatCount(0);
+                }}
+                className="fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40 bg-purple-600 text-white px-4 py-3 rounded-full font-bold shadow-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+                aria-label={`Open chat${unreadChatCount > 0 ? `, ${unreadChatCount > 99 ? "99+" : unreadChatCount} unread messages` : ""}`}
               >
-                {/* Backdrop */}
+                Chat
+                {unreadChatCount > 0 && (
+                  <span className="bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                    {unreadChatCount > 99 ? "99+" : unreadChatCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Drawer overlay (mobile) */}
+              {showMobileChat && (
                 <div
-                  className="absolute inset-0 bg-black/50"
-                  onClick={() => setShowMobileChat(false)}
-                />
-                {/* Drawer (slides in from right) */}
-                <div className="relative w-80 max-w-[85vw] h-full bg-card-bg shadow-xl">
-                  <button
+                  className="fixed inset-0 z-50 flex justify-end"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Chat"
+                  onKeyDown={handleFocusTrap}
+                >
+                  {/* Backdrop */}
+                  <div
+                    className="absolute inset-0 bg-black/50"
                     onClick={() => setShowMobileChat(false)}
-                    className="absolute top-4 right-4 z-10 text-card-muted hover:text-card-text text-2xl p-2"
-                    aria-label="Close chat"
-                  >
-                    x
-                  </button>
-                  {renderChatPanel()}
+                  />
+                  {/* Drawer (slides in from right) */}
+                  <div className="relative w-80 max-w-[85vw] h-full bg-card-bg shadow-xl">
+                    <button
+                      onClick={() => setShowMobileChat(false)}
+                      className="absolute top-4 right-4 z-10 text-card-muted hover:text-card-text text-2xl p-2"
+                      aria-label="Close chat"
+                    >
+                      x
+                    </button>
+                    {renderChatPanel()}
+                  </div>
                 </div>
-              </div>
-            )}
-          </>
-        ) : (
-          /* Chat sidebar (desktop) - positioned on right edge */
-          <div className="fixed right-4 top-4 w-80 h-[calc(100vh-2rem)]">
-            {renderChatPanel()}
-          </div>
+              )}
+            </>
+          ) : (
+            /* Chat sidebar (desktop) - positioned on right edge */
+            <div className="fixed right-4 top-4 w-80 h-[calc(100vh-2rem)]">
+              {renderChatPanel()}
+            </div>
+          )
         )}
       </div>
     </main>

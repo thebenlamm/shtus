@@ -11,7 +11,9 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "deploy": "npx partykit deploy && vercel --prod"
+    "deploy": "./scripts/deploy.sh staging",
+    "deploy:staging": "./scripts/deploy.sh staging",
+    "deploy:production": "./scripts/deploy.sh production"
   },
   "dependencies": {
     "next": "16.1.4",

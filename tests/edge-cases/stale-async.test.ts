@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestServer, TestServer } from "../utils/party-test-server";
-import { createMockPlayer, MockPlayer } from "../utils/mock-player";
+import { createMockPlayer } from "../utils/mock-player";
 import { PHASES, type GameState } from "../../party/main";
 
 describe("Stale Async Result Handling", () => {
@@ -33,7 +33,7 @@ describe("Stale Async Result Handling", () => {
 
       server = createTestServer("stale-test", { XAI_API_KEY: "test-key" });
       const host = createMockPlayer(server, "Host");
-      const player2 = createMockPlayer(server, "Player2");
+      createMockPlayer(server, "Player2"); // Need 2 players to start
 
       // Start first game - slow generation starts
       server.sendMessage(host.conn, {
@@ -86,10 +86,10 @@ describe("Stale Async Result Handling", () => {
 
       server = createTestServer("stale-test", { XAI_API_KEY: "test-key" });
       const host = createMockPlayer(server, "Host");
-      const player2 = createMockPlayer(server, "Player2");
+      createMockPlayer(server, "Player2"); // Need 2 players to start
 
-      let state = server.getState() as GameState;
-      const initialGenId = state.generationId;
+      const initialState = server.getState() as GameState;
+      const initialGenId = initialState.generationId;
 
       // Start game
       server.sendMessage(host.conn, {
@@ -98,10 +98,10 @@ describe("Stale Async Result Handling", () => {
         roundLimit: 3,
       });
 
-      state = server.getState() as GameState;
+      const afterStartState = server.getState() as GameState;
 
       // generationId should have incremented
-      expect(state.generationId).toBe(initialGenId + 1);
+      expect(afterStartState.generationId).toBe(initialGenId + 1);
     });
 
     it("increments generationId on restart", async () => {
@@ -130,7 +130,7 @@ describe("Stale Async Result Handling", () => {
         player2.answer(`answer ${round}`);
         server.sendMessage(host.conn, { type: "end-writing" });
 
-        let state = server.getState() as GameState;
+        const state = server.getState() as GameState;
         const hostIndex = state.answerOrder.indexOf(host.id);
         const player2Index = state.answerOrder.indexOf(player2.id);
         host.vote(player2Index);

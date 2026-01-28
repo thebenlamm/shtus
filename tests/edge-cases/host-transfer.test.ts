@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { createTestServer, TestServer } from "../utils/party-test-server";
-import { createMockPlayer, MockPlayer } from "../utils/mock-player";
+import { createMockPlayer } from "../utils/mock-player";
 import { type GameState } from "../../party/main";
 
 describe("Host Transfer", () => {

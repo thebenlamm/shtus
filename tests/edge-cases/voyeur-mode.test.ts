@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestServer, TestServer } from "../utils/party-test-server";
-import { createMockPlayer, MockPlayer } from "../utils/mock-player";
+import { createMockPlayer } from "../utils/mock-player";
 import { PHASES, type GameState } from "../../party/main";
 
 describe("Voyeur Mode", () => {
@@ -108,7 +108,7 @@ describe("Voyeur Mode", () => {
       );
 
       const host = createMockPlayer(server, "Host");
-      const player2 = createMockPlayer(server, "Player2");
+      createMockPlayer(server, "Player2"); // Need 2 active players to start
       const voyeur = createMockPlayer(server, "Voyeur");
 
       // Make voyeur a voyeur before game starts
@@ -166,7 +166,7 @@ describe("Voyeur Mode", () => {
     });
 
     it("voyeurs can still chat", () => {
-      const host = createMockPlayer(server, "Host");
+      createMockPlayer(server, "Host"); // Need at least one other player
       const voyeur = createMockPlayer(server, "Voyeur");
 
       voyeur.toggleVoyeur();

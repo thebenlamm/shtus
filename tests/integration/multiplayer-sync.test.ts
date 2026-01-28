@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestServer, TestServer } from "../utils/party-test-server";
-import { createMockPlayer, createPlayers, MockPlayer } from "../utils/mock-player";
+import { createMockPlayer } from "../utils/mock-player";
 import { type GameState } from "../../party/main";
 
 describe("Multiplayer Synchronization", () => {
@@ -22,7 +22,7 @@ describe("Multiplayer Synchronization", () => {
       player3.conn.clearMessages();
 
       // Join another player - should broadcast to all
-      const player4 = createMockPlayer(server, "Player4");
+      createMockPlayer(server, "Player4"); // Triggers state broadcast
 
       // All existing players should have received the state update
       const state1 = player1.getLastState();

@@ -507,6 +507,8 @@ export default function GamePage({
         className={`fixed top-0 left-0 right-0 z-50 ${bgColors[connectionStatus]} text-white text-center py-2 px-4 text-sm font-medium`}
         role="status"
         aria-live="polite"
+        data-testid="connection-status"
+        data-status={connectionStatus}
       >
         {messages[connectionStatus]}
       </div>
@@ -655,7 +657,7 @@ export default function GamePage({
           {/* Header */}
           <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2">
-            <div className="bg-accent-bg backdrop-blur px-4 py-2 rounded-full text-white font-bold">
+            <div className="bg-accent-bg backdrop-blur px-4 py-2 rounded-full text-white font-bold" data-testid="room-code">
               Room: {roomId}
             </div>
             <button
@@ -687,7 +689,7 @@ export default function GamePage({
             </button>
           </div>
           {state.round > 0 && (
-            <div className="bg-accent-bg backdrop-blur px-4 py-2 rounded-full text-white font-bold">
+            <div className="bg-accent-bg backdrop-blur px-4 py-2 rounded-full text-white font-bold" data-testid="round-indicator">
               Round {state.round}{state.roundLimit ? `/${state.roundLimit}` : ''}
             </div>
           )}
@@ -695,7 +697,7 @@ export default function GamePage({
 
         {/* LOBBY */}
         {state.phase === "lobby" && (
-          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6">
+          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6" data-testid="lobby-phase">
             <h2 className="text-2xl font-bold text-center mb-4">
               {state.isGenerating ? "Generating prompts..." : "Waiting for players..."}
             </h2>
@@ -708,10 +710,11 @@ export default function GamePage({
               </div>
             ) : (
               <>
-                <ul className="space-y-2 mb-6" aria-label="Players in room">
+                <ul className="space-y-2 mb-6" aria-label="Players in room" data-testid="player-list">
                   {players.map((p) => (
                     <li
                       key={p.id}
+                      data-testid={`player-${p.id}`}
                       className={`p-3 rounded-xl ${
                         p.disconnectedAt
                           ? "opacity-40 bg-progress-bg italic"
@@ -738,6 +741,7 @@ export default function GamePage({
                       </label>
                       <input
                         id="theme-input"
+                        data-testid="theme-input"
                         type="text"
                         placeholder="e.g., The naked truth, Office nightmares, Dating disasters"
                         value={theme}
@@ -759,10 +763,11 @@ export default function GamePage({
                     </div>
                     <div className="mb-4">
                       <span className="block text-sm font-medium text-label-text mb-2">Rounds</span>
-                      <div className="flex gap-2" role="group" aria-label="Select number of rounds">
+                      <div className="flex gap-2" role="group" aria-label="Select number of rounds" data-testid="round-selector">
                         {[3, 5, 10].map((num) => (
                           <button
                             key={num}
+                            data-testid={`round-${num}`}
                             onClick={() => setRoundLimit(num)}
                             className={`px-4 py-2 rounded-full font-bold transition-colors ${
                               roundLimit === num
@@ -775,6 +780,7 @@ export default function GamePage({
                           </button>
                         ))}
                         <button
+                          data-testid="round-endless"
                           onClick={() => setRoundLimit(null)}
                           className={`px-4 py-2 rounded-full font-bold transition-colors ${
                             roundLimit === null
@@ -798,6 +804,7 @@ export default function GamePage({
 
                 {isHost && activePlayers.length >= 2 && (
                   <button
+                    data-testid="start-game-btn"
                     onClick={startGame}
                     disabled={!canSend}
                     className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white text-xl font-bold rounded-xl hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
@@ -826,8 +833,8 @@ export default function GamePage({
 
         {/* WRITING */}
         {state.phase === "writing" && (
-          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6">
-            <h2 className="text-xl font-bold text-center mb-1">{state.currentPrompt}</h2>
+          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6" data-testid="writing-phase">
+            <h2 className="text-xl font-bold text-center mb-1" data-testid="current-prompt">{state.currentPrompt}</h2>
             {state.promptSource && (
               <p className="text-center mb-2">
                 <span className="text-xs px-2 py-0.5 rounded-full bg-progress-bg text-muted-extra">
@@ -852,6 +859,7 @@ export default function GamePage({
                 <label htmlFor="answer-input" className="sr-only">Your answer</label>
                 <textarea
                   id="answer-input"
+                  data-testid="answer-input"
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value.slice(0, 100))}
                   placeholder="Type your answer..."
@@ -862,6 +870,7 @@ export default function GamePage({
                 <div className="flex justify-between items-center mt-2">
                   <span id="char-count" className="text-card-muted" aria-live="polite">{answer.length}/100 characters</span>
                   <button
+                    data-testid="submit-answer-btn"
                     onClick={submitAnswer}
                     disabled={!answer.trim() || !canSend}
                     className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-xl disabled:opacity-50 hover:scale-105 transition-transform disabled:hover:scale-100"
@@ -918,8 +927,8 @@ export default function GamePage({
 
         {/* VOTING */}
         {state.phase === "voting" && (
-          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6">
-            <h2 className="text-xl font-bold text-center mb-1">{state.currentPrompt}</h2>
+          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6" data-testid="voting-phase">
+            <h2 className="text-xl font-bold text-center mb-1" data-testid="current-prompt">{state.currentPrompt}</h2>
             {state.promptSource && (
               <p className="text-center mb-3">
                 <span className="text-xs px-2 py-0.5 rounded-full bg-progress-bg text-muted-extra">
@@ -951,12 +960,13 @@ export default function GamePage({
                 </button>
               </>
             ) : !hasVoted ? (
-              <div className="space-y-3">
+              <div className="space-y-3" data-testid="vote-options">
                 {answers
                   .filter((a) => !a.isOwn)
                   .map((a) => (
                     <button
                       key={a.answerId}
+                      data-testid={`answer-option-${a.answerId}`}
                       onClick={() => vote(a.answerId)}
                       disabled={!canSend}
                       className="w-full p-4 bg-progress-bg rounded-xl text-left hover:bg-highlight-bg hover:border-purple-500 border-2 border-transparent transition-colors disabled:opacity-50"
@@ -1016,7 +1026,7 @@ export default function GamePage({
 
         {/* REVEAL */}
         {state.phase === "reveal" && (
-          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6">
+          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6" data-testid="reveal-phase">
             <h2 className="text-xl font-bold text-center mb-4">Results</h2>
             <div className="space-y-3">
               {/* Sort a copy to avoid mutating state, use answerId as stable key */}
@@ -1046,6 +1056,7 @@ export default function GamePage({
             </div>
             {isHost && (
               <button
+                data-testid="next-round-btn"
                 onClick={nextRound}
                 disabled={!canSend}
                 className="w-full mt-4 py-3 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-xl hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
@@ -1058,8 +1069,8 @@ export default function GamePage({
 
         {/* FINAL */}
         {state.phase === "final" && (
-          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6">
-            <h2 className="text-3xl font-black text-center mb-6">
+          <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6" data-testid="final-phase">
+            <h2 className="text-3xl font-black text-center mb-6" data-testid="winner-display">
               {sortedPlayers[0]?.name} WINS!
             </h2>
             <div className="space-y-2 mb-6">
@@ -1086,6 +1097,7 @@ export default function GamePage({
             </div>
             {isHost && (
               <button
+                data-testid="play-again-btn"
                 onClick={restart}
                 disabled={!canSend}
                 className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white text-xl font-bold rounded-xl hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"

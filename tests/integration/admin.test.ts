@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestServer, TestServer } from "../utils/party-test-server";
-import { createMockPlayer, MockPlayer } from "../utils/mock-player";
+import { createMockPlayer } from "../utils/mock-player";
 import { type GameState } from "../../party/main";
 
 describe("Admin Key Validation", () => {
@@ -65,7 +65,7 @@ describe("Admin Key Validation", () => {
   describe("Per-action admin validation", () => {
     it("rejects admin-set-override from non-admin", () => {
       const regular = createMockPlayer(server, "Regular");
-      const admin = createMockPlayer(server, "Admin", undefined, ADMIN_KEY);
+      createMockPlayer(server, "Admin", undefined, ADMIN_KEY); // Admin exists but action is from regular
 
       // Regular player tries to set exact question
       regular.setExactQuestion("Hacked question");
@@ -93,7 +93,7 @@ describe("Admin Key Validation", () => {
       );
 
       const admin = createMockPlayer(server, "Admin", undefined, ADMIN_KEY);
-      const player2 = createMockPlayer(server, "Player2");
+      createMockPlayer(server, "Player2"); // Need 2 players to start
 
       // Admin sets exact question
       admin.setExactQuestion("Admin's custom question?");
@@ -121,7 +121,7 @@ describe("Admin Key Validation", () => {
       );
 
       const admin = createMockPlayer(server, "Admin", undefined, ADMIN_KEY);
-      const player2 = createMockPlayer(server, "Player2");
+      createMockPlayer(server, "Player2"); // Need 2 players to start
 
       admin.setExactQuestion("One-time question");
 

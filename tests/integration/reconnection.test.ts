@@ -54,7 +54,7 @@ describe("Player Reconnection", () => {
       player2.disconnect();
 
       // Player2 reconnects (same ID)
-      const reconnected = player2.reconnect();
+      player2.reconnect();
 
       // Score should be preserved
       const afterReconnect = server.getState() as GameState;
@@ -83,7 +83,7 @@ describe("Player Reconnection", () => {
       vi.spyOn(Date, "now").mockReturnValue(startTime + 6 * 60 * 1000);
 
       // Trigger cleanup (happens on join)
-      const player3 = createMockPlayer(server, "Player3");
+      createMockPlayer(server, "Player3"); // Joining triggers cleanup
 
       const state = server.getState() as GameState;
 
@@ -97,7 +97,7 @@ describe("Player Reconnection", () => {
 
   describe("Win streak preservation", () => {
     it("preserves win streak on reconnect", async () => {
-      const player3 = createMockPlayer(server, "Player3");
+      createMockPlayer(server, "Player3"); // Need 3 players for game
 
       // Start game
       server.sendMessage(host.conn, {
@@ -128,11 +128,10 @@ describe("Player Reconnection", () => {
       // Simulate: new connection opens with same ID
       const newConn = server.room.addConnection(player2.id);
       const ctx = { request: new Request("http://test/") };
-      server.server.onConnect(newConn as any, ctx as any);
+      server.server.onConnect(newConn as unknown as Parameters<typeof server.server.onConnect>[0], ctx as unknown as Parameters<typeof server.server.onConnect>[1]);
 
-      // Old connection closes
-      const oldConn = server.room.getConnection(player2.id);
-      // Since both have same ID, only one exists in map
+      // Old connection closes - since both have same ID, only one exists in map
+      // (server.room.getConnection(player2.id) would return the new connection)
 
       const state = server.getState() as GameState;
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestServer, TestServer } from "../utils/party-test-server";
 import { createMockPlayer, MockPlayer } from "../utils/mock-player";
-import { HARDCODED_PROMPTS, type GameState } from "../../party/main";
+import { type GameState } from "../../party/main";
 
 describe("Prompt Generation", () => {
   let server: TestServer;
@@ -38,7 +38,7 @@ describe("Prompt Generation", () => {
     });
 
     it("includes player names in API request", async () => {
-      let capturedBody: any;
+      let capturedBody: { messages: Array<{ role: string; content: string }> };
       vi.spyOn(global, "fetch").mockImplementation(async (url, options) => {
         if (typeof url === "string" && url.includes("api.x.ai")) {
           capturedBody = JSON.parse(options?.body as string);
@@ -63,7 +63,7 @@ describe("Prompt Generation", () => {
 
       // Check that player names were included
       const userMessage = capturedBody.messages.find(
-        (m: any) => m.role === "user"
+        (m) => m.role === "user"
       );
       expect(userMessage.content).toContain("Host");
       expect(userMessage.content).toContain("Player2");
@@ -185,11 +185,6 @@ describe("Prompt Generation", () => {
       // If the prompt had {name}, it should have been replaced
       // with either Alice or Bob
       expect(state.currentPrompt).not.toContain("{name}");
-
-      // The prompt should contain one of the player names if it was a personalized prompt
-      const hasPlayerName =
-        state.currentPrompt.includes("Alice") ||
-        state.currentPrompt.includes("Bob");
 
       // Either it's a generic prompt or it has a player name - both are valid
       expect(state.currentPrompt.length).toBeGreaterThan(0);

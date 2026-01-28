@@ -129,7 +129,7 @@ describe("Chat Rate Limiting", () => {
       ];
 
       const chatMessages = allMessages.filter(
-        (m: any) => m.type === "chat_message"
+        (m) => (m as { type?: string }).type === "chat_message"
       );
 
       // Each player should receive the chat message

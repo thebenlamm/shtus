@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, use } from "react";
 import PartySocket from "partysocket";
 import { useTheme } from "@/hooks/useTheme";
+import { useIsMobile, getInitialIsMobile } from "@/hooks/useIsMobile";
 import AdminPanel from "@/components/AdminPanel";
 
 interface Player {
@@ -73,6 +74,7 @@ export default function GamePage({
   const [copied, setCopied] = useState(false);
   const socketRef = useRef<PartySocket | null>(null);
   const { theme: colorTheme, toggleTheme } = useTheme();
+  const isMobile = useIsMobile();
 
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -86,6 +88,12 @@ export default function GamePage({
     promptGuidance: null,
   });
   const [showMobileAdmin, setShowMobileAdmin] = useState(false);
+  const [showMobileChat, setShowMobileChat] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const showMobileChatRef = useRef(false); // Track current value for WebSocket handler
+  const isMobileRef = useRef(getInitialIsMobile()); // Track current value for WebSocket handler
+  const chatInputRef = useRef<HTMLInputElement>(null); // For focus management
+  const previousFocusRef = useRef<HTMLElement | null>(null); // Restore focus on close
 
   useEffect(() => {
     // Generate or retrieve stable userId for session persistence across refreshes
@@ -161,6 +169,15 @@ export default function GamePage({
           // Sort to handle rare out-of-order WebSocket delivery
           return [...prev, data.message].sort((a, b) => a.timestamp - b.timestamp);
         });
+        // Track unread for mobile only (when on mobile, drawer closed, message from others, not system)
+        if (
+          isMobileRef.current &&
+          !showMobileChatRef.current &&
+          data.message.playerId !== socketRef.current?.id &&
+          data.message.type === "chat"
+        ) {
+          setUnreadChatCount(prev => prev + 1);
+        }
       }
     };
 
@@ -182,6 +199,68 @@ export default function GamePage({
   const send = (data: object) => {
     socketRef.current?.send(JSON.stringify(data));
   };
+
+  // Sync refs with state for WebSocket handler
+  useEffect(() => {
+    showMobileChatRef.current = showMobileChat;
+  }, [showMobileChat]);
+
+  useEffect(() => {
+    isMobileRef.current = isMobile;
+  }, [isMobile]);
+
+  // Reset drawer state when crossing breakpoint to avoid stale state
+  useEffect(() => {
+    if (!isMobile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional sync when breakpoint changes
+      setShowMobileChat(false);
+      setShowMobileAdmin(false);
+      setUnreadChatCount(0); // Clear badge when switching to desktop (chat visible)
+    }
+  }, [isMobile]);
+
+  // Escape key closes mobile drawers
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (showMobileChat) setShowMobileChat(false);
+        if (showMobileAdmin) setShowMobileAdmin(false);
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [showMobileChat, showMobileAdmin]);
+
+  // Focus management and body scroll lock for drawers
+  useEffect(() => {
+    const isAnyDrawerOpen = showMobileChat || showMobileAdmin;
+
+    if (isAnyDrawerOpen) {
+      // Lock body scroll
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+
+      // Save current focus to restore later
+      previousFocusRef.current = document.activeElement as HTMLElement;
+
+      // Focus the chat input after a brief delay for DOM to settle
+      let focusTimer: ReturnType<typeof setTimeout> | null = null;
+      if (showMobileChat) {
+        focusTimer = setTimeout(() => chatInputRef.current?.focus(), 50);
+      }
+
+      return () => {
+        // Restore body scroll
+        document.body.style.overflow = originalOverflow;
+        // Clear focus timer
+        if (focusTimer) clearTimeout(focusTimer);
+      };
+    } else if (previousFocusRef.current) {
+      // Restore focus when drawer closes
+      previousFocusRef.current.focus();
+      previousFocusRef.current = null;
+    }
+  }, [showMobileChat, showMobileAdmin]);
 
   // Auto-scroll chat to bottom when new messages arrive
   useEffect(() => {
@@ -222,6 +301,27 @@ export default function GamePage({
   const restart = () => send({ type: "restart" });
   const setAdminOverride = (data: { exactQuestion?: string | null; promptGuidance?: string | null }) => {
     send({ type: "admin-set-override", ...data });
+  };
+
+  // Focus trap handler for modal drawers
+  const handleFocusTrap = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    const container = e.currentTarget;
+    const focusable = container.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   };
 
   if (!state) {
@@ -311,6 +411,7 @@ export default function GamePage({
       <div className="p-3 border-t border-card-border">
         <div className="flex gap-2">
           <input
+            ref={chatInputRef}
             type="text"
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value.slice(0, 150))}
@@ -793,8 +894,11 @@ export default function GamePage({
           <>
             {/* Floating button (mobile only) */}
             <button
-              onClick={() => setShowMobileAdmin(true)}
-              className="lg:hidden fixed left-4 bottom-4 z-40 bg-purple-600 text-white px-4 py-3 rounded-full font-bold shadow-lg hover:bg-purple-700 transition-colors"
+              onClick={() => {
+                setShowMobileAdmin(true);
+                setShowMobileChat(false); // Mutual exclusion
+              }}
+              className="lg:hidden fixed left-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40 bg-purple-600 text-white px-4 py-3 rounded-full font-bold shadow-lg hover:bg-purple-700 transition-colors"
               aria-label="Open admin controls"
             >
               Admin
@@ -802,7 +906,13 @@ export default function GamePage({
 
             {/* Drawer overlay (mobile only) */}
             {showMobileAdmin && (
-              <div className="lg:hidden fixed inset-0 z-50 flex">
+              <div
+                className="lg:hidden fixed inset-0 z-50 flex"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Admin controls"
+                onKeyDown={handleFocusTrap}
+              >
                 {/* Backdrop */}
                 <div
                   className="absolute inset-0 bg-black/50"
@@ -812,7 +922,7 @@ export default function GamePage({
                 <div className="relative w-80 max-w-[85vw] h-full bg-card-bg shadow-xl">
                   <button
                     onClick={() => setShowMobileAdmin(false)}
-                    className="absolute top-4 right-4 z-10 text-card-muted hover:text-card-text text-2xl"
+                    className="absolute top-4 right-4 z-10 text-card-muted hover:text-card-text text-2xl p-2"
                     aria-label="Close admin panel"
                   >
                     x
@@ -828,10 +938,61 @@ export default function GamePage({
           </>
         )}
 
-        {/* Chat sidebar (desktop only) - positioned on right edge */}
-        <div className="hidden lg:block fixed right-4 top-4 w-80 h-[calc(100vh-2rem)]">
-          {renderChatPanel()}
-        </div>
+        {/* Chat - render only one panel at a time to avoid shared ref issues */}
+        {isMobile ? (
+          <>
+            {/* Floating button (mobile) */}
+            <button
+              onClick={() => {
+                setShowMobileChat(true);
+                setShowMobileAdmin(false); // Mutual exclusion
+                setUnreadChatCount(0);
+              }}
+              className="fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40 bg-purple-600 text-white px-4 py-3 rounded-full font-bold shadow-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+              aria-label={`Open chat${unreadChatCount > 0 ? `, ${unreadChatCount > 99 ? "99+" : unreadChatCount} unread messages` : ""}`}
+            >
+              Chat
+              {unreadChatCount > 0 && (
+                <span className="bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                  {unreadChatCount > 99 ? "99+" : unreadChatCount}
+                </span>
+              )}
+            </button>
+
+            {/* Drawer overlay (mobile) */}
+            {showMobileChat && (
+              <div
+                className="fixed inset-0 z-50 flex justify-end"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Chat"
+                onKeyDown={handleFocusTrap}
+              >
+                {/* Backdrop */}
+                <div
+                  className="absolute inset-0 bg-black/50"
+                  onClick={() => setShowMobileChat(false)}
+                />
+                {/* Drawer (slides in from right) */}
+                <div className="relative w-80 max-w-[85vw] h-full bg-card-bg shadow-xl">
+                  <button
+                    onClick={() => setShowMobileChat(false)}
+                    className="absolute top-4 right-4 z-10 text-card-muted hover:text-card-text text-2xl p-2"
+                    aria-label="Close chat"
+                  >
+                    x
+                  </button>
+                  {renderChatPanel()}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          /* Chat sidebar (desktop) - positioned on right edge */
+          <div className="fixed right-4 top-4 w-80 h-[calc(100vh-2rem)]">
+            {renderChatPanel()}
+          </div>
+        )}
       </div>
     </main>
   );

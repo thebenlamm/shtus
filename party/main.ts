@@ -2,7 +2,7 @@ import type * as Party from "partykit/server";
 
 // Hardcoded adult prompts - fallback when AI unavailable
 // {name} will be replaced with a random player's name
-const HARDCODED_PROMPTS = [
+export const HARDCODED_PROMPTS = [
   // Personalized roasts
   "What's {name}'s most shameful browser history entry?",
   "If {name} had an OnlyFans, what would their niche be?",
@@ -44,7 +44,7 @@ const HARDCODED_PROMPTS = [
 ];
 
 // Sanitize user input to prevent prompt injection
-function sanitizeForLLM(input: string): string {
+export function sanitizeForLLM(input: string): string {
   // Allowlist approach: only permit safe characters
   // - Alphanumeric, spaces, and common punctuation needed for names/text
   // - Collapse all whitespace to single spaces (prevents newline injection attacks)
@@ -57,7 +57,7 @@ function sanitizeForLLM(input: string): string {
 // Timing-safe string comparison for secrets
 // Returns true if strings are equal, using constant-time comparison
 // Pads to same length to avoid leaking length information
-function timingSafeEqual(a: string, b: string): boolean {
+export function timingSafeEqual(a: string, b: string): boolean {
   const encoder = new TextEncoder();
   const bufA = encoder.encode(a);
   const bufB = encoder.encode(b);
@@ -81,7 +81,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 // Validate exact question input from admin
 // Returns cleaned string or null if invalid
-function validateExactQuestion(input: string | null | undefined): string | null {
+export function validateExactQuestion(input: string | null | undefined): string | null {
   if (input === null || input === undefined) {
     return null;
   }
@@ -104,7 +104,7 @@ function validateExactQuestion(input: string | null | undefined): string | null 
   return cleaned;
 }
 
-type PromptSource = "ai" | "fallback" | "admin";
+export type PromptSource = "ai" | "fallback" | "admin";
 
 interface GeneratedPrompt {
   prompt: string;
@@ -112,7 +112,7 @@ interface GeneratedPrompt {
 }
 
 // Chat message types
-interface ChatMessage {
+export interface ChatMessage {
   id: string;
   playerId: string;
   playerName: string;
@@ -274,7 +274,7 @@ Generate 1 unique prompt. Return ONLY the prompt text, no quotes, no JSON, no ex
   }
 }
 
-function replaceNamesInPrompts(prompts: string[], playerNames: string[]): string[] {
+export function replaceNamesInPrompts(prompts: string[], playerNames: string[]): string[] {
   // Sanitize names to prevent prompt injection when inserted into prompts
   const sanitizedNames = playerNames.map(name => sanitizeForLLM(name));
   const names = sanitizedNames.length > 0 ? sanitizedNames : ["someone"];
@@ -287,7 +287,7 @@ function replaceNamesInPrompts(prompts: string[], playerNames: string[]): string
   });
 }
 
-function shuffleArray<T>(array: T[]): T[] {
+export function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -296,7 +296,7 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
-const PHASES = {
+export const PHASES = {
   LOBBY: "lobby",
   PROMPT: "prompt",
   WRITING: "writing",
@@ -307,7 +307,7 @@ const PHASES = {
 
 type Phase = (typeof PHASES)[keyof typeof PHASES];
 
-interface Player {
+export interface Player {
   id: string;
   name: string;
   score: number;
@@ -324,7 +324,7 @@ interface RoundHistory {
   topAnswers: string[]; // Answers that got 50%+ of votes
 }
 
-interface GameState {
+export interface GameState {
   phase: Phase;
   round: number;
   roundLimit: number | null; // null = endless, number = finite

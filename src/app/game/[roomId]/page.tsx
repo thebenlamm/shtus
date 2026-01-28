@@ -54,6 +54,7 @@ interface GameState {
   promptSource: "ai" | "fallback" | "admin" | null;
   theme: string;
   isGenerating: boolean;
+  isPromptLoading: boolean;
   answers: Answer[];
   votes: Record<string, string>;
   submittedPlayerIds: string[];
@@ -834,13 +835,22 @@ export default function GamePage({
         {/* WRITING */}
         {state.phase === "writing" && (
           <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6" data-testid="writing-phase">
-            <h2 className="text-xl font-bold text-center mb-1" data-testid="current-prompt">{state.currentPrompt}</h2>
-            {state.promptSource && (
-              <p className="text-center mb-2">
-                <span className="text-xs px-2 py-0.5 rounded-full bg-progress-bg text-muted-extra">
-                  {state.promptSource === "ai" ? "🤖 grok" : state.promptSource === "admin" ? "👑 host" : "📦 classic"}
-                </span>
-              </p>
+            {state.isPromptLoading ? (
+              <div className="text-center py-4 mb-2">
+                <div className="text-4xl mb-2 animate-pulse" role="img" aria-label="Loading">🎲</div>
+                <h2 className="text-xl font-bold text-card-muted" data-testid="current-prompt">Generating question...</h2>
+              </div>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold text-center mb-1" data-testid="current-prompt">{state.currentPrompt}</h2>
+                {state.promptSource && (
+                  <p className="text-center mb-2">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-progress-bg text-muted-extra">
+                      {state.promptSource === "ai" ? "🤖 grok" : state.promptSource === "admin" ? "👑 host" : "📦 classic"}
+                    </span>
+                  </p>
+                )}
+              </>
             )}
             {isVoyeur ? (
               <div className="text-center py-8" role="status">
@@ -917,6 +927,7 @@ export default function GamePage({
               <button
                 onClick={endWriting}
                 disabled={!canSend}
+                data-testid="end-writing-btn"
                 className="w-full mt-4 py-3 bg-btn-secondary text-white font-bold rounded-xl hover:bg-btn-secondary-hover transition-colors disabled:opacity-50"
               >
                 END WRITING → VOTE
@@ -963,10 +974,10 @@ export default function GamePage({
               <div className="space-y-3" data-testid="vote-options">
                 {answers
                   .filter((a) => !a.isOwn)
-                  .map((a) => (
+                  .map((a, index) => (
                     <button
                       key={a.answerId}
-                      data-testid={`answer-option-${a.answerId}`}
+                      data-testid={`answer-option-${index}`}
                       onClick={() => vote(a.answerId)}
                       disabled={!canSend}
                       className="w-full p-4 bg-progress-bg rounded-xl text-left hover:bg-highlight-bg hover:border-purple-500 border-2 border-transparent transition-colors disabled:opacity-50"
@@ -1016,6 +1027,7 @@ export default function GamePage({
               <button
                 onClick={endVoting}
                 disabled={!canSend}
+                data-testid="end-voting-btn"
                 className="w-full mt-4 py-3 bg-btn-secondary text-white font-bold rounded-xl hover:bg-btn-secondary-hover transition-colors disabled:opacity-50"
               >
                 END VOTING → RESULTS

@@ -7,7 +7,7 @@ describe("Chat Rate Limiting", () => {
   let player: MockPlayer;
 
   beforeEach(() => {
-    server = createTestServer("chat-test", {});
+    server = createTestServer("chat-test", { CHAT_ENABLED: "true" });
     player = createMockPlayer(server, "Player");
   });
 

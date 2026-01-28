@@ -46,7 +46,7 @@ describe("Host Transfer", () => {
       expect(state.hostId).toBe(activePlayer.id);
     });
 
-    it("falls back to voyeur if no active players", () => {
+    it("sets host to null if no active players remain", () => {
       const host = createMockPlayer(server, "Host");
       const voyeur = createMockPlayer(server, "Voyeur");
 
@@ -58,8 +58,8 @@ describe("Host Transfer", () => {
 
       const state = server.getState() as GameState;
 
-      // Should transfer to voyeur since there are no other active players
-      expect(state.hostId).toBe(voyeur.id);
+      // No active players remain, host should be null
+      expect(state.hostId).toBeNull();
     });
 
     it("sets hostId to null if no players remain", () => {

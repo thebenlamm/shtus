@@ -13,8 +13,32 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Shtus - The Party Game",
-  description: "A multiplayer party game of outrageous answers",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_BASE_URL || "https://shtus.com"
+  ),
+  title: {
+    default: "Shtus - The Party Game",
+    template: "%s | Shtus",
+  },
+  description: "A multiplayer party game of outrageous answers. Create a room, invite friends, and see who can come up with the funniest responses!",
+  keywords: ["party game", "multiplayer", "fun", "friends", "game night", "shtus"],
+  authors: [{ name: "Shtus Team" }],
+  openGraph: {
+    title: "Shtus - The Party Game",
+    description: "A multiplayer party game of outrageous answers. Create a room, invite friends, and see who can come up with the funniest responses!",
+    type: "website",
+    siteName: "Shtus",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Shtus - The Party Game",
+    description: "A multiplayer party game of outrageous answers!",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
@@ -27,15 +51,18 @@ export default function RootLayout({
       <head>
         {/* Theme initialization script - runs before React hydrates to prevent flash.
             suppressHydrationWarning on <html> is required because this script may add
-            the 'dark' class before React renders, causing a class mismatch. */}
+            the 'dark' class before React renders, causing a class mismatch.
+            Note: This inline script should ideally have a CSP hash, but Next.js
+            doesn't easily support nonces for inline scripts in app router.
+            The script only reads localStorage and sets a class - no external data. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(t===null&&matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark')}catch(e){if(matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.classList.add('dark')}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||t==='light'){if(t==='dark')document.documentElement.classList.add('dark')}else if(matchMedia('(prefers-color-scheme:dark)').matches){document.documentElement.classList.add('dark')}}catch(e){if(matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.classList.add('dark')}})();`,
           }}
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
         <a
           href="#main"

@@ -7,7 +7,7 @@ describe("Voyeur Mode", () => {
   let server: TestServer;
 
   beforeEach(() => {
-    server = createTestServer("voyeur-test", {});
+    server = createTestServer("voyeur-test", { CHAT_ENABLED: "true" });
   });
 
   describe("Last active player protection", () => {
@@ -225,13 +225,15 @@ describe("Voyeur Mode", () => {
 
       server.sendMessage(host.conn, { type: "end-writing" });
 
-      // Check the state - player3's answer should be in answers
-      // but they shouldn't be in submittedPlayerIds (filtered to active only)
+      // Check the state - player3's answer should be removed before voting
       const state = host.getLastState();
       const submittedIds = state?.submittedPlayerIds as string[];
+      const answers = state?.answers as { playerId?: string; answer: string }[];
 
       // Player3 should not be in submitted players (voyeur now)
       expect(submittedIds).not.toContain(player3.id);
+      // Voting pool should exclude player3's answer
+      expect(answers.length).toBe(2);
     });
   });
 

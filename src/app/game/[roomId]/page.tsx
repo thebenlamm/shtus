@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState, useRef, use } from "react";
+import { useEffect, useState, useRef, use, useCallback } from "react";
 import PartySocket from "partysocket";
 import { useTheme } from "@/hooks/useTheme";
 import { useIsMobile, getInitialIsMobile } from "@/hooks/useIsMobile";
 import AdminPanel from "@/components/AdminPanel";
 
 const CHAT_ENABLED = process.env.NEXT_PUBLIC_CHAT_ENABLED === "true";
+
+// Connection status for UI feedback
+type ConnectionStatus = "connecting" | "connected" | "reconnecting" | "disconnected";
 
 interface Player {
   id: string;
@@ -72,11 +75,16 @@ export default function GamePage({
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [hasVoted, setHasVoted] = useState(false);
   const [theme, setTheme] = useState("");
+  const [themeError, setThemeError] = useState<string | null>(null);
   const [roundLimit, setRoundLimit] = useState<number | null>(null); // Default to endless
   const [copied, setCopied] = useState(false);
   const socketRef = useRef<PartySocket | null>(null);
   const { theme: colorTheme, toggleTheme } = useTheme();
   const isMobile = useIsMobile();
+
+  // Connection state tracking
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
+  const connectionStatusRef = useRef<ConnectionStatus>("connecting"); // Ref for handlers to avoid stale closures
 
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -95,9 +103,36 @@ export default function GamePage({
   const showMobileChatRef = useRef(false); // Track current value for WebSocket handler
   const isMobileRef = useRef(getInitialIsMobile()); // Track current value for WebSocket handler
   const chatInputRef = useRef<HTMLInputElement>(null); // For focus management
+  const adminDrawerRef = useRef<HTMLDivElement>(null); // For admin drawer focus
   const previousFocusRef = useRef<HTMLElement | null>(null); // Restore focus on close
 
+  // Cleanup refs for timeouts
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
+  // Track if user is near bottom of chat for auto-scroll behavior
+  const isNearBottomRef = useRef(true);
+
+  // Guarded send function - only sends if socket is OPEN
+  const send = useCallback((data: object): boolean => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify(data));
+      return true;
+    }
+    return false;
+  }, []);
+
+  // Check if we can send (for UI state)
+  const canSend = connectionStatus === "connected";
+
+  // Keep ref in sync with state for handlers
   useEffect(() => {
+    connectionStatusRef.current = connectionStatus;
+  }, [connectionStatus]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
     // Generate or retrieve stable userId for session persistence across refreshes
     const storageKey = `shtus-user-${roomId}`;
     let userId = localStorage.getItem(storageKey);
@@ -106,17 +141,28 @@ export default function GamePage({
       localStorage.setItem(storageKey, userId);
     }
 
-    // Handle admin key: store from URL param or retrieve from localStorage
+    // Handle admin key: use sessionStorage for reduced exposure (cleared on tab close).
+    // This is a security tradeoff: sessionStorage limits persistence but admin key
+    // still exists in browser memory during the session. True security requires
+    // server-side token validation with short TTLs.
     const adminStorageKey = `shtus-admin-${roomId}`;
     let adminKey: string | null = null;
-    if (adminParam) {
-      // New admin key from URL - store it
-      localStorage.setItem(adminStorageKey, adminParam);
-      adminKey = adminParam;
-    } else {
-      // Check if we have a stored admin key (for reconnection)
-      adminKey = localStorage.getItem(adminStorageKey);
+    try {
+      if (adminParam) {
+        // New admin key from URL - store in sessionStorage
+        sessionStorage.setItem(adminStorageKey, adminParam);
+        adminKey = adminParam;
+      } else {
+        // Check if we have a stored admin key (for reconnection within session)
+        adminKey = sessionStorage.getItem(adminStorageKey);
+      }
+    } catch {
+      // sessionStorage unavailable - use URL param only
+      adminKey = adminParam || null;
     }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: setting initial state when effect runs
+    setConnectionStatus("connecting");
 
     const socket = new PartySocket({
       host: process.env.NEXT_PUBLIC_PARTYKIT_HOST || "localhost:1999",
@@ -127,6 +173,8 @@ export default function GamePage({
     socketRef.current = socket;
 
     socket.onopen = () => {
+      if (!mountedRef.current) return;
+      setConnectionStatus("connected");
       setMyId(socket.id);
       // Reset admin status on new connection - will be set if we receive admin-state
       setIsAdmin(false);
@@ -142,8 +190,33 @@ export default function GamePage({
       socket.send(JSON.stringify(joinMessage));
     };
 
+    socket.onerror = () => {
+      if (!mountedRef.current) return;
+      // PartySocket handles reconnection automatically; we just track the state
+      // Use ref to avoid stale closure
+      if (connectionStatusRef.current !== "disconnected") {
+        setConnectionStatus("reconnecting");
+      }
+    };
+
+    socket.onclose = () => {
+      if (!mountedRef.current) return;
+      // PartySocket will attempt reconnection automatically with exponential backoff
+      setConnectionStatus("reconnecting");
+    };
+
     socket.onmessage = (e) => {
-      const data = JSON.parse(e.data);
+      if (!mountedRef.current) return;
+
+      // Guard against malformed payloads
+      let data;
+      try {
+        data = JSON.parse(e.data);
+      } catch {
+        // Ignore malformed messages
+        return;
+      }
+
       if (data.type === "state") {
         setState(data);
         // Note: isAdmin is NOT broadcast in player state for security
@@ -159,15 +232,16 @@ export default function GamePage({
         // Deduplicate by ID in case of reconnection
         setChatMessages(prev => {
           const existingIds = new Set(prev.map(m => m.id));
-          const newMessages = data.messages.filter((m: ChatMessage) => !existingIds.has(m.id));
+          const newMessages = (data.messages ?? []).filter((m: ChatMessage) => !existingIds.has(m.id));
           return [...prev, ...newMessages].sort((a, b) => a.timestamp - b.timestamp);
         });
       } else if (data.type === "chat_message") {
         setChatMessages(prev => {
           // Deduplicate
-          if (prev.some(m => m.id === data.message.id)) {
+          if (prev.some(m => m.id === data.message?.id)) {
             return prev;
           }
+          if (!data.message) return prev;
           // Sort to handle rare out-of-order WebSocket delivery
           return [...prev, data.message].sort((a, b) => a.timestamp - b.timestamp);
         });
@@ -175,32 +249,48 @@ export default function GamePage({
         if (
           isMobileRef.current &&
           !showMobileChatRef.current &&
-          data.message.playerId !== socketRef.current?.id &&
-          data.message.type === "chat"
+          data.message?.playerId !== socketRef.current?.id &&
+          data.message?.type === "chat"
         ) {
           setUnreadChatCount(prev => prev + 1);
         }
       }
     };
 
-    return () => socket.close();
+    return () => {
+      mountedRef.current = false;
+      socket.close();
+    };
+    // Note: connectionStatus intentionally excluded - handlers use ref to avoid recreating socket
   }, [roomId, name, adminParam]);
 
+  // Reset local state on phase change
   useEffect(() => {
     if (state?.phase === "writing") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setHasSubmitted(false);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: reset local input when entering new writing phase
       setAnswer("");
-    }
-    if (state?.phase === "voting") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setHasVoted(false);
     }
   }, [state?.phase, state?.round]);
 
-  const send = (data: object) => {
-    socketRef.current?.send(JSON.stringify(data));
-  };
+  // Sync hasSubmitted with server state (derived from submittedPlayerIds)
+  useEffect(() => {
+    if (state?.phase === "writing" && myId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: sync local state with server state
+      setHasSubmitted((state.submittedPlayerIds ?? []).includes(myId));
+    } else if (state?.phase !== "writing") {
+      setHasSubmitted(false);
+    }
+  }, [state?.phase, state?.submittedPlayerIds, myId]);
+
+  // Sync hasVoted with server state (derived from votedPlayerIds)
+  useEffect(() => {
+    if (state?.phase === "voting" && myId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: sync local state with server state
+      setHasVoted((state.votedPlayerIds ?? []).includes(myId));
+    } else if (state?.phase !== "voting") {
+      setHasVoted(false);
+    }
+  }, [state?.phase, state?.votedPlayerIds, myId]);
 
   // Sync refs with state for WebSocket handler
   useEffect(() => {
@@ -245,10 +335,18 @@ export default function GamePage({
       // Save current focus to restore later
       previousFocusRef.current = document.activeElement as HTMLElement;
 
-      // Focus the chat input after a brief delay for DOM to settle
+      // Focus the appropriate element after a brief delay for DOM to settle
       let focusTimer: ReturnType<typeof setTimeout> | null = null;
       if (showMobileChat) {
         focusTimer = setTimeout(() => chatInputRef.current?.focus(), 50);
+      } else if (showMobileAdmin) {
+        // Focus first focusable element in admin drawer
+        focusTimer = setTimeout(() => {
+          const focusable = adminDrawerRef.current?.querySelector<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          );
+          focusable?.focus();
+        }, 50);
       }
 
       return () => {
@@ -264,15 +362,33 @@ export default function GamePage({
     }
   }, [showMobileChat, showMobileAdmin]);
 
-  // Auto-scroll chat to bottom when new messages arrive
-  useEffect(() => {
+  // Track scroll position in chat for smart auto-scroll
+  const handleChatScroll = useCallback(() => {
     if (chatContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+      // Consider "near bottom" if within 100px of the bottom
+      isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 100;
+    }
+  }, []);
+
+  // Auto-scroll chat to bottom when new messages arrive (only if user is near bottom)
+  useEffect(() => {
+    if (chatContainerRef.current && isNearBottomRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [chatMessages]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const sendChat = () => {
-    if (chatInput.trim()) {
+    if (chatInput.trim() && canSend) {
       send({ type: "chat", text: chatInput.trim() });
       setChatInput("");
     }
@@ -285,24 +401,66 @@ export default function GamePage({
     }
   };
 
-  const startGame = () => send({ type: "start", theme: theme || "random funny questions", roundLimit });
-  const endWriting = () => send({ type: "end-writing" });
-  const endVoting = () => send({ type: "end-voting" });
-  const nextRound = () => send({ type: "next-round" });
-  const toggleVoyeur = () => send({ type: "toggle-voyeur" });
+  // Theme validation: allow letters, numbers, spaces, and common punctuation
+  const THEME_REGEX = /^[a-zA-Z0-9\s.,!?'"()-]+$/;
+  const MIN_THEME_LENGTH = 3;
+
+  const validateTheme = (value: string): string | null => {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return null; // Empty is OK (uses default)
+    if (trimmed.length < MIN_THEME_LENGTH) return `Theme must be at least ${MIN_THEME_LENGTH} characters`;
+    if (!THEME_REGEX.test(trimmed)) return "Theme contains invalid characters";
+    return null;
+  };
+
+  const handleThemeChange = (value: string) => {
+    setTheme(value);
+    if (themeError) {
+      setThemeError(validateTheme(value));
+    }
+  };
+
+  const startGame = () => {
+    const trimmedTheme = theme.trim();
+    const error = validateTheme(trimmedTheme);
+    if (error) {
+      setThemeError(error);
+      return;
+    }
+    setThemeError(null);
+    if (canSend) send({ type: "start", theme: trimmedTheme || "random funny questions", roundLimit });
+  };
+  const endWriting = () => {
+    if (canSend) send({ type: "end-writing" });
+  };
+  const endVoting = () => {
+    if (canSend) send({ type: "end-voting" });
+  };
+  const nextRound = () => {
+    if (canSend) send({ type: "next-round" });
+  };
+  const toggleVoyeur = () => {
+    if (canSend) send({ type: "toggle-voyeur" });
+  };
   const submitAnswer = () => {
-    if (answer.trim()) {
+    if (answer.trim() && canSend) {
       send({ type: "answer", answer: answer.trim() });
+      // Optimistic update - server state will confirm via submittedPlayerIds
       setHasSubmitted(true);
     }
   };
   const vote = (answerId: number) => {
-    send({ type: "vote", votedFor: answerId });
-    setHasVoted(true);
+    if (canSend) {
+      send({ type: "vote", votedFor: answerId });
+      // Optimistic update - server state will confirm via votedPlayerIds
+      setHasVoted(true);
+    }
   };
-  const restart = () => send({ type: "restart" });
+  const restart = () => {
+    if (canSend) send({ type: "restart" });
+  };
   const setAdminOverride = (data: { exactQuestion?: string | null; promptGuidance?: string | null }) => {
-    send({ type: "admin-set-override", ...data });
+    if (canSend) send({ type: "admin-set-override", ...data });
   };
 
   // Focus trap handler for modal drawers
@@ -326,6 +484,35 @@ export default function GamePage({
     }
   };
 
+  // Connection status banner
+  const renderConnectionBanner = () => {
+    if (connectionStatus === "connected" || !state) return null;
+
+    const messages: Record<ConnectionStatus, string> = {
+      connecting: "Connecting...",
+      reconnecting: "Connection lost. Reconnecting...",
+      disconnected: "Disconnected. Please refresh the page.",
+      connected: "",
+    };
+
+    const bgColors: Record<ConnectionStatus, string> = {
+      connecting: "bg-yellow-500",
+      reconnecting: "bg-orange-500",
+      disconnected: "bg-red-500",
+      connected: "",
+    };
+
+    return (
+      <div
+        className={`fixed top-0 left-0 right-0 z-50 ${bgColors[connectionStatus]} text-white text-center py-2 px-4 text-sm font-medium`}
+        role="status"
+        aria-live="polite"
+      >
+        {messages[connectionStatus]}
+      </div>
+    );
+  };
+
   if (!state) {
     return (
       <main id="main" className="min-h-screen bg-gradient-to-br from-gradient-from via-gradient-via to-gradient-to flex items-center justify-center" aria-busy="true">
@@ -335,10 +522,12 @@ export default function GamePage({
   }
 
   const isHost = myId === state.hostId;
-  const myPlayer = state.players.find(p => p.id === myId);
+  const myPlayer = (state.players ?? []).find(p => p.id === myId);
   const isVoyeur = myPlayer?.isVoyeur ?? false;
-  const activePlayers = state.players.filter(p => !p.isVoyeur && !p.disconnectedAt);
-  const sortedPlayers = [...state.players].sort((a, b) => b.score - a.score);
+  const players = state.players ?? [];
+  const activePlayers = players.filter(p => !p.isVoyeur && !p.disconnectedAt);
+  const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+  const answers = state.answers ?? [];
 
   // Render streak badge (shows when winStreak >= 2)
   const streakBadge = (player: Player) =>
@@ -352,7 +541,15 @@ export default function GamePage({
     const url = `${window.location.origin}/join/${roomId}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    // Clear any existing timeout
+    if (copyTimeoutRef.current) {
+      clearTimeout(copyTimeoutRef.current);
+    }
+    copyTimeoutRef.current = setTimeout(() => {
+      if (mountedRef.current) {
+        setCopied(false);
+      }
+    }, 2000);
   };
 
   // Render compact scoreboard for header
@@ -387,6 +584,7 @@ export default function GamePage({
       </div>
       <div
         ref={chatContainerRef}
+        onScroll={handleChatScroll}
         className="flex-1 overflow-y-auto p-4 space-y-2"
         style={{ minHeight: 0 }}
       >
@@ -418,13 +616,14 @@ export default function GamePage({
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value.slice(0, 150))}
             onKeyDown={handleChatKeyDown}
-            placeholder="Type a message..."
-            className="flex-1 px-3 py-2 rounded-lg border border-input-border bg-input-bg text-card-text text-sm focus:border-purple-500 focus:outline-none"
+            placeholder={canSend ? "Type a message..." : "Reconnecting..."}
+            disabled={!canSend}
+            className="flex-1 px-3 py-2 rounded-lg border border-input-border bg-input-bg text-card-text text-sm focus:border-purple-500 focus:outline-none disabled:opacity-50"
             maxLength={150}
           />
           <button
             onClick={sendChat}
-            disabled={!chatInput.trim()}
+            disabled={!chatInput.trim() || !canSend}
             className="px-3 py-2 bg-purple-600 text-white rounded-lg disabled:opacity-50 hover:bg-purple-700 transition-colors"
             aria-label="Send message"
           >
@@ -437,7 +636,10 @@ export default function GamePage({
   );
 
   return (
-    <main id="main" className="min-h-screen bg-gradient-to-br from-gradient-from via-gradient-via to-gradient-to p-4">
+    <main id="main" className={`min-h-screen bg-gradient-to-br from-gradient-from via-gradient-via to-gradient-to p-4 ${connectionStatus !== "connected" && state ? "pt-12" : ""}`}>
+      {/* Connection status banner */}
+      {renderConnectionBanner()}
+
       <h1 className="sr-only">Shtus Game Room {roomId}</h1>
       {/* Screen reader announcements for game state changes */}
       <div aria-live="assertive" aria-atomic="true" className="sr-only">
@@ -465,7 +667,8 @@ export default function GamePage({
             </button>
             <button
               onClick={toggleVoyeur}
-              className={`backdrop-blur px-3 py-2 rounded-full font-bold transition-colors ${
+              disabled={!canSend}
+              className={`backdrop-blur px-3 py-2 rounded-full font-bold transition-colors disabled:opacity-50 ${
                 isVoyeur
                   ? "bg-purple-600 text-white hover:bg-purple-700"
                   : "bg-accent-bg text-white hover:bg-black/70"
@@ -506,7 +709,7 @@ export default function GamePage({
             ) : (
               <>
                 <ul className="space-y-2 mb-6" aria-label="Players in room">
-                  {state.players.map((p) => (
+                  {players.map((p) => (
                     <li
                       key={p.id}
                       className={`p-3 rounded-xl ${
@@ -538,10 +741,21 @@ export default function GamePage({
                         type="text"
                         placeholder="e.g., The naked truth, Office nightmares, Dating disasters"
                         value={theme}
-                        onChange={(e) => setTheme(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-input-border focus:border-purple-500 focus:outline-none bg-input-bg text-card-text"
+                        onChange={(e) => handleThemeChange(e.target.value)}
+                        className={`w-full px-4 py-3 rounded-xl border-2 focus:outline-none bg-input-bg text-card-text ${
+                          themeError
+                            ? "border-red-500 focus:border-red-500"
+                            : "border-input-border focus:border-purple-500"
+                        }`}
                         maxLength={100}
+                        aria-invalid={!!themeError}
+                        aria-describedby={themeError ? "theme-error" : undefined}
                       />
+                      {themeError && (
+                        <p id="theme-error" className="text-red-500 text-sm mt-1" role="alert">
+                          {themeError}
+                        </p>
+                      )}
                     </div>
                     <div className="mb-4">
                       <span className="block text-sm font-medium text-label-text mb-2">Rounds</span>
@@ -578,14 +792,15 @@ export default function GamePage({
 
                 <p className="text-center text-card-muted mb-4">
                   {activePlayers.length < 2
-                    ? `Need at least 2 active players (${activePlayers.length} active${state.players.length > activePlayers.length ? `, ${state.players.length - activePlayers.length} watching` : ""})`
-                    : `${activePlayers.length} players ready!${state.players.length > activePlayers.length ? ` (${state.players.length - activePlayers.length} watching)` : ""}`}
+                    ? `Need at least 2 active players (${activePlayers.length} active${players.length > activePlayers.length ? `, ${players.length - activePlayers.length} watching` : ""})`
+                    : `${activePlayers.length} players ready!${players.length > activePlayers.length ? ` (${players.length - activePlayers.length} watching)` : ""}`}
                 </p>
 
                 {isHost && activePlayers.length >= 2 && (
                   <button
                     onClick={startGame}
-                    className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white text-xl font-bold rounded-xl hover:scale-105 transition-transform"
+                    disabled={!canSend}
+                    className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white text-xl font-bold rounded-xl hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
                   >
                     START GAME
                   </button>
@@ -626,7 +841,8 @@ export default function GamePage({
                 <p className="text-card-muted">You&apos;re watching. Waiting for players to submit...</p>
                 <button
                   onClick={toggleVoyeur}
-                  className="mt-4 px-4 py-2 text-purple-600 font-medium hover:underline"
+                  disabled={!canSend}
+                  className="mt-4 px-4 py-2 text-purple-600 font-medium hover:underline disabled:opacity-50"
                 >
                   Rejoin as player
                 </button>
@@ -647,8 +863,8 @@ export default function GamePage({
                   <span id="char-count" className="text-card-muted" aria-live="polite">{answer.length}/100 characters</span>
                   <button
                     onClick={submitAnswer}
-                    disabled={!answer.trim()}
-                    className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-xl disabled:opacity-50 hover:scale-105 transition-transform"
+                    disabled={!answer.trim() || !canSend}
+                    className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-xl disabled:opacity-50 hover:scale-105 transition-transform disabled:hover:scale-100"
                   >
                     SUBMIT
                   </button>
@@ -663,19 +879,19 @@ export default function GamePage({
             {/* Submission progress */}
             <div className="mt-4 p-3 bg-progress-bg rounded-xl">
               <p className="text-sm text-card-muted mb-2">
-                Submitted: {state.submittedPlayerIds?.length || 0}/{activePlayers.length}
-                {state.players.length > activePlayers.length && (
-                  <span className="text-muted-extra"> ({state.players.length - activePlayers.length} watching)</span>
+                Submitted: {(state.submittedPlayerIds ?? []).length}/{activePlayers.length}
+                {players.length > activePlayers.length && (
+                  <span className="text-muted-extra"> ({players.length - activePlayers.length} watching)</span>
                 )}
               </p>
               <div className="flex flex-wrap gap-2">
-                {state.players.map((p) => (
+                {players.map((p) => (
                   <span
                     key={p.id}
                     className={`text-xs px-2 py-1 rounded-full ${
                       p.isVoyeur
                         ? "bg-progress-bg text-muted-extra opacity-50"
-                        : state.submittedPlayerIds?.includes(p.id)
+                        : (state.submittedPlayerIds ?? []).includes(p.id)
                         ? "bg-submitted-bg text-submitted-text"
                         : "bg-card-border text-card-muted"
                     }`}
@@ -683,7 +899,7 @@ export default function GamePage({
                     {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
                     {p.name} {streakBadge(p)}
                     {p.isVoyeur && <span role="img" aria-label="Watching"> 👁️</span>}
-                    {!p.isVoyeur && state.submittedPlayerIds?.includes(p.id) && <span role="img" aria-label="Submitted"> ✓</span>}
+                    {!p.isVoyeur && (state.submittedPlayerIds ?? []).includes(p.id) && <span role="img" aria-label="Submitted"> ✓</span>}
                   </span>
                 ))}
               </div>
@@ -691,7 +907,8 @@ export default function GamePage({
             {isHost && (
               <button
                 onClick={endWriting}
-                className="w-full mt-4 py-3 bg-btn-secondary text-white font-bold rounded-xl hover:bg-btn-secondary-hover transition-colors"
+                disabled={!canSend}
+                className="w-full mt-4 py-3 bg-btn-secondary text-white font-bold rounded-xl hover:bg-btn-secondary-hover transition-colors disabled:opacity-50"
               >
                 END WRITING → VOTE
               </button>
@@ -716,7 +933,7 @@ export default function GamePage({
                   <span className="text-card-muted">👁️ Watching the votes come in...</span>
                 </div>
                 <div className="space-y-3">
-                  {state.answers.map((a) => (
+                  {answers.map((a) => (
                     <div
                       key={a.answerId}
                       className="w-full p-4 bg-progress-bg rounded-xl text-left opacity-75"
@@ -727,25 +944,27 @@ export default function GamePage({
                 </div>
                 <button
                   onClick={toggleVoyeur}
-                  className="w-full mt-4 py-2 text-purple-600 font-medium hover:underline"
+                  disabled={!canSend}
+                  className="w-full mt-4 py-2 text-purple-600 font-medium hover:underline disabled:opacity-50"
                 >
                   Rejoin as player
                 </button>
               </>
             ) : !hasVoted ? (
               <div className="space-y-3">
-                {state.answers
+                {answers
                   .filter((a) => !a.isOwn)
                   .map((a) => (
                     <button
                       key={a.answerId}
                       onClick={() => vote(a.answerId)}
-                      className="w-full p-4 bg-progress-bg rounded-xl text-left hover:bg-highlight-bg hover:border-purple-500 border-2 border-transparent transition-colors"
+                      disabled={!canSend}
+                      className="w-full p-4 bg-progress-bg rounded-xl text-left hover:bg-highlight-bg hover:border-purple-500 border-2 border-transparent transition-colors disabled:opacity-50"
                     >
                       {a.answer}
                     </button>
                   ))}
-                {state.answers.filter((a) => !a.isOwn).length === 0 && (
+                {answers.filter((a) => !a.isOwn).length === 0 && (
                   <p className="text-center text-card-muted">No other answers to vote on</p>
                 )}
               </div>
@@ -758,19 +977,19 @@ export default function GamePage({
             {/* Voting progress */}
             <div className="mt-4 p-3 bg-progress-bg rounded-xl">
               <p className="text-sm text-card-muted mb-2">
-                Voted: {state.votedPlayerIds?.length || 0}/{activePlayers.length}
-                {state.players.length > activePlayers.length && (
-                  <span className="text-muted-extra"> ({state.players.length - activePlayers.length} watching)</span>
+                Voted: {(state.votedPlayerIds ?? []).length}/{activePlayers.length}
+                {players.length > activePlayers.length && (
+                  <span className="text-muted-extra"> ({players.length - activePlayers.length} watching)</span>
                 )}
               </p>
               <div className="flex flex-wrap gap-2">
-                {state.players.map((p) => (
+                {players.map((p) => (
                   <span
                     key={p.id}
                     className={`text-xs px-2 py-1 rounded-full ${
                       p.isVoyeur
                         ? "bg-progress-bg text-muted-extra opacity-50"
-                        : state.votedPlayerIds?.includes(p.id)
+                        : (state.votedPlayerIds ?? []).includes(p.id)
                         ? "bg-submitted-bg text-submitted-text"
                         : "bg-card-border text-card-muted"
                     }`}
@@ -778,7 +997,7 @@ export default function GamePage({
                     {p.id === state.hostId && <span role="img" aria-label="Host">👑 </span>}
                     {p.name} {streakBadge(p)}
                     {p.isVoyeur && <span role="img" aria-label="Watching"> 👁️</span>}
-                    {!p.isVoyeur && state.votedPlayerIds?.includes(p.id) && <span role="img" aria-label="Voted"> ✓</span>}
+                    {!p.isVoyeur && (state.votedPlayerIds ?? []).includes(p.id) && <span role="img" aria-label="Voted"> ✓</span>}
                   </span>
                 ))}
               </div>
@@ -786,7 +1005,8 @@ export default function GamePage({
             {isHost && (
               <button
                 onClick={endVoting}
-                className="w-full mt-4 py-3 bg-btn-secondary text-white font-bold rounded-xl hover:bg-btn-secondary-hover transition-colors"
+                disabled={!canSend}
+                className="w-full mt-4 py-3 bg-btn-secondary text-white font-bold rounded-xl hover:bg-btn-secondary-hover transition-colors disabled:opacity-50"
               >
                 END VOTING → RESULTS
               </button>
@@ -799,14 +1019,16 @@ export default function GamePage({
           <div className="bg-card-bg backdrop-blur rounded-3xl shadow-2xl p-6">
             <h2 className="text-xl font-bold text-center mb-4">Results</h2>
             <div className="space-y-3">
-              {state.answers
+              {/* Sort a copy to avoid mutating state, use answerId as stable key */}
+              {[...answers]
                 .sort((a, b) => b.votes - a.votes)
-                .map((a, i) => {
-                  const player = state.players.find((p) => p.id === a.playerId);
-                  const isWinner = a.votes === Math.max(...state.answers.map((x) => x.votes)) && a.votes > 0;
+                .map((a) => {
+                  const player = players.find((p) => p.id === a.playerId);
+                  const maxVotes = Math.max(...answers.map((x) => x.votes));
+                  const isWinner = a.votes === maxVotes && a.votes > 0;
                   return (
                     <div
-                      key={i}
+                      key={a.answerId}
                       className={`p-4 rounded-xl ${isWinner ? "bg-winner-bg border-2 border-winner-border" : "bg-progress-bg"}`}
                     >
                       <div className="font-bold text-lg">{a.answer}</div>
@@ -825,7 +1047,8 @@ export default function GamePage({
             {isHost && (
               <button
                 onClick={nextRound}
-                className="w-full mt-4 py-3 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-xl hover:scale-105 transition-transform"
+                disabled={!canSend}
+                className="w-full mt-4 py-3 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-xl hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
               >
                 NEXT ROUND →
               </button>
@@ -864,7 +1087,8 @@ export default function GamePage({
             {isHost && (
               <button
                 onClick={restart}
-                className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white text-xl font-bold rounded-xl hover:scale-105 transition-transform"
+                disabled={!canSend}
+                className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white text-xl font-bold rounded-xl hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
               >
                 PLAY AGAIN
               </button>
@@ -921,7 +1145,10 @@ export default function GamePage({
                   onClick={() => setShowMobileAdmin(false)}
                 />
                 {/* Drawer */}
-                <div className="relative w-80 max-w-[85vw] h-full bg-card-bg shadow-xl">
+                <div
+                  ref={adminDrawerRef}
+                  className="relative w-80 max-w-[85vw] h-full bg-card-bg shadow-xl"
+                >
                   <button
                     onClick={() => setShowMobileAdmin(false)}
                     className="absolute top-4 right-4 z-10 text-card-muted hover:text-card-text text-2xl p-2"

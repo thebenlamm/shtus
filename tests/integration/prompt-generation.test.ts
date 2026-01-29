@@ -37,7 +37,7 @@ describe("Prompt Generation", () => {
       expect(state.promptSource).toBe("ai");
     });
 
-    it("includes player names in API request", async () => {
+    it("includes player names in API request for third-person roasts", async () => {
       let capturedBody: { messages: Array<{ role: string; content: string }> };
       vi.spyOn(global, "fetch").mockImplementation(async (url, options) => {
         if (typeof url === "string" && url.includes("api.x.ai")) {
@@ -61,12 +61,47 @@ describe("Prompt Generation", () => {
 
       await server.waitForGeneration();
 
-      // Check that player names were included
+      // Player names should be in the request for third-person roasts (about them, not to them)
       const userMessage = capturedBody.messages.find(
         (m) => m.role === "user"
       );
       expect(userMessage.content).toContain("Host");
       expect(userMessage.content).toContain("Player2");
+      expect(userMessage.content).toContain("funny theme");
+    });
+
+    it("uses fallback names in API request when player names are empty after sanitization", async () => {
+      let capturedBody: { messages: Array<{ role: string; content: string }> };
+      vi.spyOn(global, "fetch").mockImplementation(async (url, options) => {
+        if (typeof url === "string" && url.includes("api.x.ai")) {
+          capturedBody = JSON.parse(options?.body as string);
+          return new Response(JSON.stringify({
+            choices: [{ message: { content: "Test prompt" } }],
+          }));
+        }
+        throw new Error("Unexpected URL");
+      });
+
+      server = createTestServer("prompt-test", { XAI_API_KEY: "test-key" });
+      // Use names that fully sanitize to empty (chars not in allowed set: a-zA-Z0-9.,!?'"-)
+      // @#$%^&*() are all stripped, and ! is allowed so avoid it
+      host = createMockPlayer(server, "@#$%^");
+      player2 = createMockPlayer(server, "&*()");
+
+      server.sendMessage(host.conn, {
+        type: "start",
+        theme: "test theme",
+        roundLimit: 3,
+      });
+
+      await server.waitForGeneration();
+
+      // Should fall back to default names when sanitized names are empty
+      const userMessage = capturedBody.messages.find(
+        (m) => m.role === "user"
+      );
+      expect(userMessage.content).toContain("Alex");
+      expect(userMessage.content).toContain("Jordan");
     });
   });
 
@@ -167,7 +202,7 @@ describe("Prompt Generation", () => {
   });
 
   describe("Name replacement in prompts", () => {
-    it("replaces {name} placeholder with random player name", async () => {
+    it("replaces {name} placeholder with random player name for roasts", async () => {
       server = createTestServer("prompt-test", {}); // No API key = uses hardcoded
       host = createMockPlayer(server, "Alice");
       player2 = createMockPlayer(server, "Bob");
@@ -183,7 +218,7 @@ describe("Prompt Generation", () => {
       const state = server.getState() as GameState;
 
       // If the prompt had {name}, it should have been replaced
-      // with either Alice or Bob
+      // with either Alice or Bob for third-person roasts
       expect(state.currentPrompt).not.toContain("{name}");
 
       // Either it's a generic prompt or it has a player name - both are valid

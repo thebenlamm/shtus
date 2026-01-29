@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 // Validate PartyKit host in production
-const partykitHost = process.env.NEXT_PUBLIC_PARTYKIT_HOST;
+// Trim whitespace to prevent CSP header corruption from trailing newlines in env vars
+const partykitHost = process.env.NEXT_PUBLIC_PARTYKIT_HOST?.trim();
 const isDev = process.env.NODE_ENV === "development";
 
 if (!isDev && !partykitHost) {

@@ -189,6 +189,12 @@ export default function GamePage({
         joinMessage.adminKey = adminKey;
       }
       socket.send(JSON.stringify(joinMessage));
+
+      // Clean up URL to prevent sharing name/admin params when copying browser URL
+      // This ensures shared links don't include the original player's identity
+      if (window.location.search) {
+        window.history.replaceState({}, "", `/game/${roomId}`);
+      }
     };
 
     socket.onerror = () => {

@@ -11,6 +11,10 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:all": "npm run test && npm run test:e2e",
+    "test:ci": "npm run test && npm run test:e2e --reporter=github",
     "deploy": "./scripts/deploy.sh staging",
     "deploy:staging": "./scripts/deploy.sh staging",
     "deploy:production": "./scripts/deploy.sh production"

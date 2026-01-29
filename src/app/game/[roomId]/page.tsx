@@ -134,12 +134,14 @@ export default function GamePage({
   useEffect(() => {
     mountedRef.current = true;
 
-    // Generate or retrieve stable userId for session persistence across refreshes
-    const storageKey = `shtus-user-${roomId}`;
-    let userId = localStorage.getItem(storageKey);
+    // Generate or retrieve per-tab userId using sessionStorage
+    // sessionStorage is per-tab, so multiple tabs get distinct player IDs
+    // Refreshing the same tab preserves the ID (sessionStorage survives refresh)
+    const storageKey = `shtus-session-${roomId}`;
+    let userId = sessionStorage.getItem(storageKey);
     if (!userId) {
       userId = crypto.randomUUID();
-      localStorage.setItem(storageKey, userId);
+      sessionStorage.setItem(storageKey, userId);
     }
 
     // Handle admin key: use sessionStorage for reduced exposure (cleared on tab close).

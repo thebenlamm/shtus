@@ -17,7 +17,8 @@
     "test:ci": "npm run test && npm run test:e2e --reporter=github",
     "deploy": "./scripts/deploy.sh staging",
     "deploy:staging": "./scripts/deploy.sh staging",
-    "deploy:production": "./scripts/deploy.sh production"
+    "deploy:production": "./scripts/deploy.sh production",
+    "test:prompts": "npx tsx scripts/test-prompts.ts"
   },
   "dependencies": {
     "next": "16.1.4",
@@ -36,6 +37,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.4",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^4.0.18",
     "ws": "^8.19.0"

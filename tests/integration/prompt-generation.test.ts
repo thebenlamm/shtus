@@ -16,7 +16,7 @@ describe("Prompt Generation", () => {
     it("uses AI-generated prompt when API available", async () => {
       vi.spyOn(global, "fetch").mockResolvedValue(
         new Response(JSON.stringify({
-          choices: [{ message: { content: "AI generated question about {name}" } }],
+          choices: [{ message: { content: "AI generated question about Host" } }],
         }))
       );
 
@@ -33,7 +33,7 @@ describe("Prompt Generation", () => {
       await server.waitForGeneration();
 
       const state = server.getState() as GameState;
-      expect(state.currentPrompt).toBe("AI generated question about {name}");
+      expect(state.currentPrompt).toBe("AI generated question about Host");
       expect(state.promptSource).toBe("ai");
     });
 
@@ -231,7 +231,7 @@ describe("Prompt Generation", () => {
       // Use mockImplementation to return a NEW Response each time
       vi.spyOn(global, "fetch").mockImplementation(async () =>
         new Response(JSON.stringify({
-          choices: [{ message: { content: "Pre-generated prompt" } }],
+          choices: [{ message: { content: "Pre-generated prompt about Host" } }],
         }))
       );
 
@@ -266,7 +266,7 @@ describe("Prompt Generation", () => {
       await server.waitForGeneration();
 
       const revealState = server.getState() as GameState;
-      expect(revealState.nextPrompt).toBe("Pre-generated prompt");
+      expect(revealState.nextPrompt).toBe("Pre-generated prompt about Host");
       expect(revealState.nextPromptSource).toBe("ai");
     });
   });

@@ -452,7 +452,7 @@ export default function GamePage({
     if (canSend) send({ type: "toggle-voyeur" });
   };
   const submitAnswer = () => {
-    if (answer.trim() && canSend) {
+    if (answer.trim() && canSend && !state?.isPromptLoading) {
       send({ type: "answer", answer: answer.trim() });
       // Optimistic update - server state will confirm via submittedPlayerIds
       setHasSubmitted(true);
@@ -883,6 +883,7 @@ export default function GamePage({
                   placeholder="Type your answer..."
                   className="w-full p-4 rounded-xl border-2 border-input-border focus:border-purple-500 focus:outline-none text-lg resize-none h-32 bg-input-bg text-card-text"
                   maxLength={100}
+                  disabled={state.isPromptLoading}
                   aria-describedby="char-count"
                 />
                 <div className="flex justify-between items-center mt-2">
@@ -890,7 +891,7 @@ export default function GamePage({
                   <button
                     data-testid="submit-answer-btn"
                     onClick={submitAnswer}
-                    disabled={!answer.trim() || !canSend}
+                    disabled={!answer.trim() || !canSend || state.isPromptLoading}
                     className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-xl disabled:opacity-50 hover:scale-105 transition-transform disabled:hover:scale-100"
                   >
                     SUBMIT

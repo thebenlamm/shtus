@@ -173,9 +173,9 @@ describe("Player Reconnection", () => {
 
       server.sendMessage(host.conn, { type: "end-voting" });
 
-      // Player2's score should not have increased (disconnected)
+      // Player2's score should increase (within grace period)
       const finalState = server.getState() as GameState;
-      expect(finalState.players[player2.id].score).toBe(0);
+      expect(finalState.players[player2.id].score).toBe(300);
     });
 
     it("preserves answer when player disconnects and reconnects during WRITING", async () => {

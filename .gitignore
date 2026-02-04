@@ -39,6 +39,9 @@ yarn-error.log*
 # Claude/AI configuration
 CLAUDE.md
 
+# prompt tuning logs
+scripts/logs/
+
 # Playwright test artifacts
 playwright-report/
 test-results/
